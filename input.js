@@ -48,6 +48,7 @@ class InputHandler {
 
             if (next instanceof Exit) {
                 alert('Win!');
+                window.location.reload(true);
             }
         }
     }
