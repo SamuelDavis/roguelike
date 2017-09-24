@@ -5,7 +5,7 @@ class Map {
         this.floor = new Floor();
     }
 
-    static generate(width = 40, height = 40) {
+    static generate(width = 25, height = 25) {
         const placeHolder = new Floor();
         const mapPadding = 2;
         const roomMin = 5;
@@ -94,7 +94,7 @@ class Map {
             this.tiles[y2][x2] = entity;
             this.tiles[y1][x1] = this.floor;
         }
-       
+
         return this.tiles[y2][x2];
     }
 }
