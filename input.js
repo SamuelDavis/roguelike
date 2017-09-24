@@ -8,8 +8,6 @@ class InputHandler {
             const deltaX = x - offsetX;
             const deltaY = y - offsetY;
 
-            console.log(x, offsetX, deltaX);
-
             if (Math.abs(deltaX) > Math.abs(deltaY)) {
                 if (deltaX > 0) {
                     this.handleEvent(InputHandler.CONTROLS.MOVE_WEST);
