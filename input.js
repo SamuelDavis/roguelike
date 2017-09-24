@@ -30,18 +30,22 @@ class InputHandler {
             switch (key) {
                 case InputHandler.CONTROLS.MOVE_NORTH:
                     [x, y] = this.map.findTiles(0, 0, null, null, Player.name)[0];
+                    this.map.tiles[y][x].facing = Entity.FACING.N;
                     next = this.map.move(x, y, x, y - 1);
                     break;
                 case InputHandler.CONTROLS.MOVE_EAST:
                     [x, y] = this.map.findTiles(0, 0, null, null, Player.name)[0];
+                    this.map.tiles[y][x].facing = Entity.FACING.E;
                     next = this.map.move(x, y, x + 1, y);
                     break;
                 case InputHandler.CONTROLS.MOVE_SOUTH:
                     [x, y] = this.map.findTiles(0, 0, null, null, Player.name)[0];
+                    this.map.tiles[y][x].facing = Entity.FACING.S;
                     next = this.map.move(x, y, x, y + 1);
                     break;
                 case InputHandler.CONTROLS.MOVE_WEST:
                     [x, y] = this.map.findTiles(0, 0, null, null, Player.name)[0];
+                    this.map.tiles[y][x].facing = Entity.FACING.W;
                     next = this.map.move(x, y, x - 1, y);
                     break;
             }

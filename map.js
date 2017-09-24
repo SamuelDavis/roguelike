@@ -5,9 +5,9 @@ class Map {
         this.floor = new Floor();
     }
 
-    static generate(width = 25, height = 25) {
+    static generate(width = 100, height = 100) {
         const placeHolder = new Floor();
-        const mapPadding = 2;
+        const mapPadding = 5;
         const roomMin = 5;
         const roomMax = 10;
         const tiles = new Array(height).fill(undefined);
@@ -70,7 +70,7 @@ class Map {
         y1 = Math.min(Math.max(y1, 0), y2);
         return this.tiles.slice(y1, y2).reduce((acc, row, y) => {
             return row.slice(x1, x2).reduce((acc, entity, x) => {
-                return entity.constructor.name === type ? acc.concat([[x, y]]) : acc;
+                return (!type || entity.constructor.name === type) ? acc.concat([[x, y, entity]]) : acc;
             }, acc);
         }, []);
     }
@@ -86,6 +86,10 @@ class Map {
         this.tiles[y][x] = entity;
 
         return entity;
+    }
+
+    getVisibleFrom(x, y, range) {
+        return this.findTiles(x, y, x + range, y + range, null);
     }
 
     move(x1, y1, x2, y2) {
