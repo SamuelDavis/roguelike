@@ -1,6 +1,7 @@
 class InputHandler {
-    constructor(map, controls) {
+    constructor(map, controls, canvas) {
         this.map = map;
+        this.canvas = canvas;
         for (let key in InputHandler.CONTROLS) {
             if (!InputHandler.CONTROLS.hasOwnProperty(key)) {
                 continue;
@@ -31,34 +32,22 @@ class InputHandler {
     }
 
     bindMobile() {
-        let swipeStartX = 0;
-        let swipeStartY = 0;
-        document.addEventListener('touchstart', ({changedTouches}) => {
-            const touch = changedTouches[0];
-            swipeStartX = touch.clientX;
-            swipeStartY = touch.clientY;
-        });
-        document.addEventListener('touchend', ({changedTouches}) => {
-            const touch = changedTouches[0];
-            const swipeEndX = touch.clientX;
-            const swipeEndY = touch.clientY;
-            const deltaX = Math.abs(swipeEndX - swipeStartX);
-            const deltaY = Math.abs(swipeEndY - swipeStartY);
+        this.canvas.addEventListener('click', ({target, offsetX, offsetY}) => {
+            const deltaX = Math.abs(target.width / 2 - offsetX);
+            const deltaY = Math.abs(target.height / 2 - offsetY);
             if (deltaX > deltaY) {
-                if (swipeStartX > swipeEndX) {
+                if (offsetX < target.width / 2) {
                     this.handleEvent(InputHandler.CONTROLS.MOVE_WEST);
                 } else {
                     this.handleEvent(InputHandler.CONTROLS.MOVE_EAST);
                 }
             } else {
-                if (swipeStartY > swipeEndY) {
+                if (offsetY < target.height / 2) {
                     this.handleEvent(InputHandler.CONTROLS.MOVE_NORTH);
                 } else {
                     this.handleEvent(InputHandler.CONTROLS.MOVE_SOUTH);
                 }
             }
-            swipeStartX = 0;
-            swipeStartY = 0;
         });
     }
 
