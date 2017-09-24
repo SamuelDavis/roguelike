@@ -29,10 +29,9 @@
     </style>
 </head>
 <body>
-<div id="controls">
-    <label>Tap Map Edge to Move or Bind Keys Below</label>
-    <br>
-</div>
+<h3>Walk to the # to Win</h3>
+<label>Tap Map Edge to Move</label>
+<br>
 <hr>
 <canvas id="screen" class="inner"></canvas>
 <script src="map.js"></script>
@@ -49,8 +48,8 @@
     }
 
     const map = Map.generate();
-    new InputHandler(map, document.getElementById('controls'), document.getElementById('screen'));
-    new Screen(document.getElementById('screen'), map);
+    const screen = new Screen(document.getElementById('screen'), map);
+    new InputHandler(map, screen);
 </script>
 </body>
 </html>
