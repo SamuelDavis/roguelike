@@ -3,12 +3,10 @@ class InputHandler {
         this.map = map;
         screen.elem.addEventListener('click', ({target, offsetX, offsetY}) => {
             const styles = window.getComputedStyle(target);
-            const x = parseInt(styles.width.replace('px', '')) / 2;
-            const y = parseInt(styles.height.replace('px', '')) / 2;
+            const tileSize = parseInt(styles.width.replace('px', '')) / this.map.tiles[0].length;
+            let [x, y] = this.map.findTiles(0, 0, null, null, Player.name)[0].map(v => v * tileSize);
             const deltaX = x - offsetX;
             const deltaY = y - offsetY;
-
-            console.log(x, offsetX, deltaX);
 
             if (Math.abs(deltaX) > Math.abs(deltaY)) {
                 if (deltaX > 0) {
