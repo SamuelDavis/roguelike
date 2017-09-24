@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport"
+          content="width=device-width, user-scalable=no, initial-scale=1.0, maximum-scale=1.0, minimum-scale=1.0">
+    <meta http-equiv="X-UA-Compatible" content="ie=edge">
+    <title>Document</title>
+    <style>
+        body {
+            background-color: #919191;
+            text-align: center;
+        }
+
+        canvas {
+            background-color: #000000;
+            display: inline-block;
+        }
+
+        input {
+            width: 20px;
+            text-align: center;
+        }
+
+        label {
+            padding: 0 5px 0 5px;
+        }
+    </style>
+</head>
+<body>
+<div id="controls">
+    <label>Swipe to Move or Bind Keys Below</label>
+    <br>
+</div>
+<hr>
+<canvas id="screen" class="inner"></canvas>
+<script src="map.js"></script>
+<script src="screen.js"></script>
+<script src="entities.js"></script>
+<script src="input.js"></script>
+<script>
+    function iterate2d(x1, y1, x2, y2, cb) {
+        for (let x = x1; x < x2; x++) {
+            for (let y = y1; y < y2; y++) {
+                cb(x, y);
+            }
+        }
+    }
+
+    const map = Map.generate();
+    new InputHandler(map, document.getElementById('controls'));
+    new Screen(document.getElementById('screen'), map);
+</script>
+</body>
+</html>
