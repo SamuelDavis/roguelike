@@ -1,0 +1,468 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport"
+          content="width=device-width, user-scalable=no, initial-scale=1.0, maximum-scale=1.0, minimum-scale=1.0">
+    <meta http-equiv="X-UA-Compatible" content="ie=edge">
+</head>
+<body>
+<canvas id="panel"></canvas>
+<script>
+    Math.randInt = function (max, min = 0) {
+        return parseInt(Math.random() * (max - min)) + min;
+    };
+
+    function RogueApp() {
+        class DrawPanel {
+            constructor() {
+                const panel = document.getElementById('panel');
+                const ctx = panel.getContext('2d');
+                panel.width = 11 * width;
+                panel.height = 11 * (height + 5)
+                document.addEventListener('keypress', this.keypress.bind(this));
+                window.requestAnimationFrame(
+                    this.paintComponent.bind(this, ctx)
+                );
+            }
+
+            keypress({key}) {
+                switch (key) {
+                    case 'w':
+                        player.move(0, -1);
+                        break;
+                    case 'd':
+                        player.move(1, 0);
+                        break;
+                    case 's':
+                        player.move(0, 1);
+                        break;
+                    case 'a':
+                        player.move(-1, 0);
+                        break;
+                }
+                if (map[player.x][player.y] === '>') {
+                    player.goDown();
+                }
+            }
+
+            paintComponent(ctx) {
+                const bounds = this.getBounds();
+                ctx.clearRect(...bounds);
+                ctx.fillStyle = '#000000';
+                ctx.fillRect(...bounds);
+                ctx.fontStyle = drawFont;
+                ctx.textBaseline = 'top';
+
+                if (player.health < 0) {
+                    ctx.fillStyle = 'rgba(255, 0, 0, 255)';
+                    const text = `Dead & buried on level ${level} with $${player.score}`;
+                    ctx.fillText(text, width * 11 - ctx.measureText(text).width - 11, height * 11);
+                    return;
+                }
+
+                for (let y = 0; y < height; y++) {
+                    for (let x = 0; x < width; x++) {
+                        let c = map[x][y];
+//                        if (!player.seen[x][y] || c === ' ') continue;
+
+                        let light = 0.25;
+                        if (player.sees[x][y]) {
+                            const dx = player.x - x;
+                            const dy = player.y - y;
+                            const rr = dx * dx + dy * dy;
+                            light = rr > 1 ? 0.5 + 4 / (rr - 1) : 1;
+                        }
+
+                        let tileColor = [1, 1, 1, 1];
+                        switch (c) {
+                            case '$':
+                                tileColor = [1, 1, 0, 1];
+                                break;
+                            case ',':
+                            case ';':
+                            case '\\':
+                            case '`':
+                                tileColor = [1, 0, 0, 1];
+                                break;
+                            case '!':
+                                tileColor = [0, 1, 0, 1];
+                                break;
+                        }
+
+                        if (player.sees[x][y]) {
+                            monsters.some(m => {
+                                if (m.x === x && m.y === y) {
+                                    tileColor = [1, 0, 0, 1];
+                                    c = m.symbol;
+                                    if (c === '@') tileColor = [0, 0, 1, 1];
+                                    return true;
+                                }
+                            })
+                        }
+
+                        tileColor = `rgba(${tileColor.map(v => parseInt(v * 255 * light)).join(',')})`;
+                        ctx.fillStyle = tileColor;
+                        ctx.fillText(c, x * 11, y * 11);
+                    }
+                }
+
+                ctx.fillStyle = whiteColor;
+                [
+                    `Score: ${player.score}`,
+                    `Lvl: ${level}`,
+                    `Health: ${player.health} / ${player.maxHealth}`,
+                    `Exp: ${1 + player.experience / 20}:${player.experience}`,
+                ].forEach((text, i) => ctx.fillText(text, 11, (height + i + 1) * 11));
+
+                player.status.forEach((text, i) => {
+                    ctx.fillStyle = player.statusColor[i];
+                    ctx.fillText(text, width * 11 - ctx.measureText(text).width - 11, (height + i + 1) * 11);
+                });
+
+                window.requestAnimationFrame(this.paintComponent.bind(this, ctx));
+            }
+
+            getBounds() {
+                const {width, height} = document.getElementById('panel');
+                return [0, 0, width, height];
+            }
+        }
+
+        class Monster {
+            constructor(health, strength, symbol, name) {
+                this.x = 10;
+                this.y = 10;
+                this.maxHealth = health;
+                this.health = health;
+                this.strength = strength;
+                this.symbol = symbol;
+                this.name = name;
+                this.experience = 0;
+                this.ai_interest = 0;
+                this.tx = null;
+                this.ty = null;
+                this.memory = false;
+            }
+
+            place() {
+                let hardStop = 100;
+                while (--hardStop > 0) {
+                    this.x = Math.randInt(width);
+                    this.y = Math.randInt(height);
+                    if (map[this.x][this.y] === floorChar) {
+                        break;
+                    }
+                }
+            }
+
+            lineOfSight(x2, y2) {
+                const {x, y} = this;
+                if (x2 < x) x2 += 0.5;
+                else if (x2 > x) x2 -= 0.5;
+                if (y2 < y) y2 += 0.5;
+                else if (y2 > y) y2 -= 0.5;
+                let dx = x2 - x;
+                let dy = y2 - y;
+                let l = Math.max(Math.abs(dx), Math.max(dy));
+                dx /= l;
+                dy /= l;
+                let xx = x;
+                let yy = y;
+                while (l > 0) {
+                    const [ix, iy] = [xx + 0.5, yy + 0.5].map(parseInt);
+                    if (x2 === ix && y2 === iy) break;
+                    if (!(x === ix && y === iy) && map[ix][iy] === '#') return false;
+                    xx += dx;
+                    yy += dy;
+                    l--;
+                }
+                return true;
+            }
+
+            gainExperience(e) {
+                this.experience += e;
+            }
+
+            damage(d, m) {
+                this.health -= d;
+                if (this.health < 0) {
+                    player.setStatus(`${this.name} killed.`, 'rgba(255, 0, 0, 255)');
+                    monsters.splice(monsters.indexOf(this), 1);
+                    m.gainExperience(Math.randInt(this.strength));
+                }
+                if (map[this.x][this.y] === floorChar) map[this.x][this.y] = [',', '\\', '`'][Math.randInt(3)];
+            }
+
+            move(dx, dy) {
+                const x2 = this.x + dx;
+                const y2 = this.y + dy;
+                if (dx === 0 && dy === 0) return;
+                if (x2 < 0 || x2 >= width) return;
+                if (y2 < 0 || y2 >= height) return;
+                if (map[x2][y2] === '#') return;
+
+                for (let i = 0; i < monsters.length; i++) {
+                    const m = monsters[i];
+                    if (m.x === x2 && m.y === y2) {
+                        m.damage(Math.randInt(this.strength + (this.experience / 20)), this);
+                        return true;
+                    }
+                }
+
+                this.x = x2;
+                this.y = y2;
+            }
+
+            ai() {
+                const see = this.lineOfSight(player.x, player.y);
+                if ((see || this.memory) && Math.random() > this.ai_interest) {
+                    if (see) {
+                        this.memory = true;
+                        this.tx = player.x;
+                        this.ty = player.y;
+                    }
+                    const dx = this.tx < this.x ? -1 : this.tx > this.x ? 1 : 0;
+                    const dy = this.ty < this.y ? -1 : this.ty > this.y ? 1 : 0;
+                    const attempt = new Array(3).fill([dx, dy]);
+
+                    attempt.some(([ddx, ddy]) => {
+                        if (map[this.x + ddx][this.y + ddy] !== '#') {
+                            this.move(ddx, ddy);
+                            return true;
+                        }
+                    })
+                } else {
+                    this.move(Math.randInt(3) - 1, Math.randInt(3) - 1)
+                }
+            }
+        }
+
+        class Character extends Monster {
+            constructor() {
+                super(20, 5, '@', 'player');
+                this.score = 0;
+                this.rest = 0;
+                this.seeRadius = 7;
+                this.status = ['', '', ''];
+                this.statusColor = [whiteColor, whiteColor, whiteColor];
+                this.sees = new Array(width).fill(undefined).map((_, x, arr) => arr[x] = new Array(height).fill(false));
+                this.seen = new Array(width).fill(undefined).map((_, x, arr) => arr[x] = new Array(height).fill(true));
+            }
+
+            ai() {
+            }
+
+            reset() {
+                this.place();
+                this.seen.forEach((row, x) => row.forEach((_, y) => this.seen[x][y] = false));
+                this.see();
+            }
+
+            setStatus(s, c) {
+                this.status = [s].concat(this.status).slice(0, 3);
+                this.statusColor = [c].concat(this.statusColor).slice(0, 3);
+            }
+
+            see() {
+                this.sees.forEach((row, x) => row.forEach((_, y) => this.sees[x][y] = false));
+                for (let x = this.x - this.seeRadius; x < this.x + this.seeRadius; x++) {
+                    for (let y = this.y - this.seeRadius; y < this.y + this.seeRadius; y++) {
+                        if (this.sees.hasOwnProperty(x) && this.sees[x].hasOwnProperty(y)) {
+                            this.sees[x][y] = true;
+                        }
+                    }
+                }
+            }
+
+            gainExperience(e) {
+                if (this.experience / 20 < (this.experience + e) / 20) {
+                    this.setStatus('Gained a new level.', 'rgba(255, 255, 0, 255)');
+                    this.maxHealth += 2;
+                }
+                this.experience += e;
+            }
+
+            damage(d, m) {
+                super.damage(d, m);
+                this.setStatus(`Hurt by an ${m.name}.`, 'rgba(255, 0, 0, 255)');
+            }
+
+            move(dx, dy) {
+                super.move(dx, dy);
+                switch (map[this.x][this.y]) {
+                    case '$':
+                        map[this.x][this.y] = floorChar;
+                        const score = Math.randInt(20) + 2;
+                        this.setStatus(`Got $${score}.`, 'rgba(255, 255, 0, 255)');
+                        this.score += score;
+                        break;
+                    case '!':
+                        map[this.x][this.y] = floorChar;
+                        const health = Math.randInt(5) + 5;
+                        this.setStatus('Drank a healing potion.', 'rgba(0, 255, 0, 255)');
+                        this.health = Math.min(this.health + health, this.maxHealth);
+                        break;
+                }
+                if (this.health < this.maxHealth) {
+                    this.rest++;
+                    if (this.rest > 20) {
+                        this.rest = 0;
+                        this.health++;
+                    }
+                }
+                this.see();
+                tick();
+            }
+
+            goDown() {
+                monsters.splice(0, monsters.length);
+                monsters.push(player);
+                genMap();
+                this.reset();
+                this.setStatus('Went downstairs.', whiteColor);
+            }
+        }
+
+        class Room {
+            constructor() {
+                while (true) {
+                    const x = Math.randInt(width - 13) + 2;
+                    const y = Math.randInt(height - 13) + 2;
+                    const w = Math.randInt(10) + 3;
+                    const h = Math.randInt(10) + 3;
+
+                    const clear = map.slice(x, w).reduce((clear, row) => clear && row.slice(y, h).reduce((clear, c) => {
+                        return clear && c === '#';
+                    }, clear), true);
+                    if (!clear) continue;
+
+                    map.slice(x, width).forEach((row, xx) => row.slice(y, height).forEach((_, yy) => {
+                        map[xx][yy] = floorChar;
+                    }));
+
+                    this.x = x;
+                    this.y = y;
+                    this.w = w;
+                    this.h = h;
+
+                    break;
+                }
+            }
+
+            createPathTo(room) {
+                let x1 = Math.randInt(this.w) + this.x;
+                let y1 = Math.randInt(this.h) + this.y;
+                const x2 = Math.randInt(room.w) + room.x;
+                const y2 = Math.randInt(room.h) + room.y;
+                let dx = x2 - x1;
+                let dy = y2 - y1;
+                dx = dx > 0 ? 1 : (dx < 0 ? -1 : 0);
+                dy = dy > 0 ? 1 : (dy < 0 ? -1 : 0);
+                let horizontal = Math.randInt(1) === 0;
+
+                while (x1 !== x2 || y1 !== y2) {
+                    if (y1 === y2 || (horizontal && x1 !== x2)) {
+                        x1 += dx;
+                    } else {
+                        y1 += dy;
+                    }
+                    if (!(x1 > 0 && y1 > 0 && x1 < width && y1 < height)) break;
+                    map[x1][y1] = floorChar;
+                    if (Math.randInt(1) === 0) {
+                        horizontal = !horizontal;
+                    }
+                }
+            }
+        }
+
+        function tick() {
+            for (let i = 0; i < monsters.length; i++) {
+                monsters[i].ai();
+            }
+        }
+
+        function genMap() {
+            for (let y = 0; y < height; y++) {
+                for (let x = 0; x < height; x++) {
+                    map[x][y] = '#';
+                }
+            }
+
+            const connectedRooms = [];
+            const rooms = [];
+            const nrooms = Math.randInt(4) + 5;
+            for (let i = 0; i < nrooms; i++) {
+                rooms.push(new Room());
+            }
+
+            connectedRooms.push(new Room());
+            while (rooms.length > 0) {
+                const a = Math.randInt(connectedRooms.length);
+                const b = Math.randInt(rooms.length);
+                connectedRooms[a].createPathTo(rooms[b]);
+                connectedRooms.push(rooms.splice(b, 1)[0]);
+            }
+
+            for (let i = 0; i < (level + 10); i++) {
+                const x = Math.randInt(width);
+                const y = Math.randInt(height);
+                map[x][y] = '$';
+            }
+
+            for (let i = 0; i < 10; i++) {
+                const x = Math.randInt(width);
+                const y = Math.randInt(height);
+                map[x][y] = '!';
+            }
+
+            let hardStop = 100;
+            while (--hardStop >= 0) {
+                const x = Math.randInt(width);
+                const y = Math.randInt(height);
+                if (map[x][y] === floorChar) {
+                    map[x][y] = '>';
+                    break;
+                }
+            }
+
+            const c = nrooms + Math.randInt(nrooms + level / 4);
+            for (let i = 0; i < c; i++) {
+                const ind = Math.randInt(Math.min(level, mtypes.length - 1), level);
+                const t = new Monster(...mtypes[ind]);
+                t.ai_interest = Math.random() / (ind + 2);
+                monsters.push(t);
+                t.place();
+            }
+            level++;
+        }
+
+        const drawFont = 'normal normal 14px Monospaced';
+        const width = 50;
+        const height = 50;
+        const map = new Array(width).fill(undefined).map((_, y, map) => map[y] = new Array(height).fill(undefined));
+        const floorChar = '.';
+        const monsters = [];
+        const whiteColor = 'rgba(255, 255, 255, 255)';
+        let level = 0;
+        const mtypes = [
+            [3, 2, 'a', 'ant'],
+            [5, 3, 'd', 'dog'],
+            [7, 4, 'k', 'kobol'],
+            [3, 6, 'g', 'goblin'],
+            [10, 3, 'h', 'hobbit'],
+            [7, 7, 'x', 'xan'],
+            [15, 15, 'D', 'dragon'],
+        ];
+        const drawPanel = new DrawPanel();
+        const player = new Character();
+
+        genMap();
+        monsters.push(player);
+        player.reset();
+    }
+
+    console.log(new RogueApp());
+</script>
+</body>
+</html>
