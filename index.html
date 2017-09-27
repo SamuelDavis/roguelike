@@ -1,0 +1,398 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport"
+          content="width=device-width, user-scalable=no, initial-scale=1.0, maximum-scale=1.0, minimum-scale=1.0">
+    <meta http-equiv="X-UA-Compatible" content="ie=edge">
+</head>
+<body>
+<canvas id="panel"></canvas>
+<script>
+    Math.randInt = function (max, min = 0) {
+        return parseInt(Math.random() * (max - min)) + min;
+    };
+
+    function RogueApp() {
+        class DrawPanel {
+            constructor() {
+                this.panel = document.getElementById('panel');
+                window.addEventListener('keypress', this.keypress.bind(this));
+                window.requestAnimationFrame(this.paintComponent.bind(this, this.panel.getContext('2d')));
+            }
+
+            keypress() {
+            }
+
+            paintComponent(ctx) {
+                const bounds = this.getBounds();
+                ctx.clearRect(...bounds);
+                ctx.fillStyle = Color.black;
+                ctx.fillRect(...bounds);
+
+                if (player.health < 100) {
+                    ctx.fillStyle = Color.red;
+                    const txt = `Dead & buried on level ${level} with $${player.score}`;
+                    const txtLength = ctx.measureText(txt).width;
+                    ctx.fillText(txt, bounds[3] / 2 - txtLength / 2, bounds[4] / 2 - txtLength / 2);
+                }
+
+                window.requestAnimationFrame(this.paintComponent.bind(this, ctx));
+            }
+
+            getBounds() {
+                const {width, height} = this.panel;
+                return [0, 0, width, height];
+            }
+        }
+
+        class Monster {
+            constructor(health, strength, symbol, name) {
+                this.maxHealth = health;
+                this.health = health;
+                this.strength = strength;
+                this.symbol = symbol;
+                this.name = name;
+                this.ai_interest = 0;
+                this.experience = 0;
+                this.seeRadius = 7;
+                this.facing = Math.randInt(numDirections);
+                this.fov = 46;
+                this.tx = null;
+                this.ty = null;
+                this.memory = false;
+            }
+
+            place() {
+                let hardStop = 100;
+                while (--hardStop) {
+                    this.x = Math.randInt(map.length);
+                    this.y = Math.randInt(map[0].length);
+                    if (map[this.x][this.y] === floorChar)
+                        break;
+                }
+            }
+
+            see() {
+                monsterSees.forEach((col, y) => col.forEach((_, x) => monsterSees[x][y] = false));
+                map.slice(this.y - this.seeRadius, this.seeRadius * 2 + 1).forEach((col, y) => {
+                    col.slice(this.x - this.seeRadius, this.seeRadius * 2 + 1).forEach((s, x) => {
+                        if (this.canSee(x, y)) {
+                            const rr = Math.pow(x, 2) + Math.pow(y, 2);
+                            const light = Math.max(1, rr > 1 ? 0.5 + 4 / (rr - 1) : 1);
+                            monsterSees[x][y] = Math.max(monsterSees[x][y], light);
+                        }
+                    })
+                })
+            }
+
+            canSee(xb, yb) {
+                const {x, y} = this;
+                let x2 = xb;
+                let y2 = yb;
+                if (x2 < x) x2 += 0.5;
+                else if (x2 > x) x2 -= 0.5;
+                if (y2 < y) y2 += 0.5;
+                else if (y2 > y) y2 -= 0.5;
+                let dx = x2 - x;
+                let dy = y2 - y;
+
+                if (dx * dx + dy * dy > Math.pow(this.seeRadius, 2)) return false;
+
+                // field of vision
+                let dl = Math.sqrt(Math.pow(dx, 2) + Math.pow(dy, 2));
+                let dot = dx / dl * unitDirections[this.facing][0] + dy / dl * unitDirections[this.facing][1];
+
+                if (dot < Math.cos(this.fov * Math.PI / 180)) return false;
+
+                return this.lineOfSight(xb, yb);
+            }
+
+            lineOfSight(xb, yb) {
+                const {x, y} = this;
+                let x2 = xb;
+                let y2 = yb;
+                if (x2 < x) x2 += 0.5;
+                else if (x2 > x) x2 -= 0.5;
+                if (y2 < y) y2 += 0.5;
+                else if (y2 > y) y2 -= 0.5;
+                let dx = x2 - x;
+                let dy = y2 - y;
+
+                let l = Math.max(Math.abs(dx), Math.abs(dy));
+                dx /= l;
+                dy /= l;
+
+                let xx = x;
+                let yy = y;
+
+                while (l > 0) {
+                    let ix = parseInt(xx + 0.5);
+                    let iy = parseInt(yy + 0.5);
+
+                    if (x2 === ix && y2 === iy) break;
+                    if (!(x === ix && y === iy) && map[ix][iy] === '#')
+                        return false;
+
+                    xx += dx;
+                    yy += dy;
+                    l--;
+                }
+                return true;
+            }
+
+            gainExperience(e) {
+                this.experience += e;
+            }
+
+            damage(d, m) {
+                this.health -= d;
+                if (this.health < 0) {
+                    player.setStatus(`${this.name} killed.`, Color.white);
+                    monsters.splice(monsters.indexOf(this), 1);
+                    m.gainExperience(Math.randInt(this.strength / 2))
+                }
+
+                if (map[this.x][this.y] === floorChar) {
+                    map[this.x][this.y] = [',', '\\', '`'][Math.randInt(3)];
+                }
+            }
+
+            move(dx, dy) {
+                if (dy === undefined) {
+                    const direction = dx;
+                    if (direction > 7) return;
+                    if (direction !== this.facing) {
+                        this.facing = direction;
+                        return;
+                    }
+                    this.move(directions[direction][0], directions[direction][1]);
+                }
+
+                let {x, y} = this;
+                if (dx === 0 && dy === 0) return;
+                if (x + dx < 0 || x + dx >= width) return;
+                if (y + dy < 0 || y + dy >= height) return;
+                if (map[x + dx][y + dy] === '#') return;
+                monsters.some(m => {
+                    if (x === m.x + dx && y === m.y + dy) {
+                        m.damage(Math.randInt(this.strength + (this.experience / 20)), this);
+                        return true;
+                    }
+                });
+
+                this.x += dx;
+                this.y += dy;
+            }
+
+            ai() {
+                const {x, y} = this;
+                const see = this.canSee(player.x, player.y);
+                if (see || this.memory) {
+                    if (Math.random() < this.ai_interest / 2) return;
+                    if (see) {
+                        this.memory = true;
+                        this.tx = player.x;
+                        this.ty = player.y;
+                    }
+                    const dx = this.tx - x;
+                    const dy = this.ty - y;
+
+                    if (dx !== 0 && dy !== 0) {
+                        let ddx = dx > 0 ? 1 : dx < 0 ? -1 : 0;
+                        let ddy = dy > 0 ? 1 : dy < 0 ? -1 : 0;
+
+                        let direction = facings[ddx + 1][ddy + 1];
+                        if (map[x + ddx][y + ddy] !== '#') {
+                            this.move(direction);
+                            return;
+                        }
+                        let right = direction + 1;
+                        if (right >= 8) right -= 8;
+                        if (map[directions[right][0] + x][directions[right][1] + y] !== '#') {
+                            this.move(right);
+                            return;
+                        }
+                        let left = direction - 1;
+                        if (left < 0) left += 8;
+                        if (map[directions[left][0] + x][directions[left][1] + y] !== '#') {
+                            this.move(left);
+                            return;
+                        }
+                    }
+
+                    if (Math.random() > this.ai_interest) {
+                        // fake a memory to get ai to go there
+                        this.memory = true;
+                        this.tx = Math.randInt(width);
+                        this.ty = Math.randInt(height);
+                    }
+                }
+            }
+        }
+
+        class Character extends Monster {
+            constructor() {
+                super(20, 20, '@', 'player');
+                this.sees = new Array(width).fill(undefined).map(() => new Array(height).fill(0));
+                this.seen = new Array(width).fill(undefined).map(() => new Array(height).fill(0));
+            }
+
+            see() {
+                this.sees.forEach((col, y) => col.forEach((_, x) => this.sees[x][y] = false));
+                map.slice(this.y - this.seeRadius, this.seeRadius * 2 + 1).forEach((col, y) => {
+                    col.slice(this.x - this.seeRadius, this.seeRadius * 2 + 1).forEach((s, x) => {
+                        if (this.canSee(x, y)) {
+                            this.sees[x][y] = this.seen[x][y] = true;
+                        }
+                    })
+                })
+            }
+
+            reset() {
+                super.place();
+                this.seen.forEach((col, y) => col.forEach((_, x) => this.seen[x][y] = false));
+                this.see();
+            }
+        }
+
+        class Room {
+            constructor() {
+                let hardStop = 100;
+                while (--hardStop > 0) {
+                    this.x = Math.randInt(width - 13) + 2;
+                    this.y = Math.randInt(height - 13) + 2;
+                    this.w = Math.randInt(10) + 3;
+                    this.h = Math.randInt(10) + 3;
+                    const clear = map
+                        .slice(this.y, this.h)
+                        .reduce((clear, col, y) => {
+                            return col.slice(this.x, this.w).reduce((clear, c) => {
+                                return clear && c === floorChar;
+                            }, clear);
+                        }, true);
+
+                    if (!clear) {
+                        map.slice(this.x, this.w).forEach((col, y) => col.forEach((_, x) => map[x][y] = floorChar));
+                        break;
+                    }
+                }
+            }
+
+            createPathTo({x, y, w, h}) {
+                let x1 = Math.randInt(this.w) + this.x;
+                let y1 = Math.randInt(this.h) + this.y;
+                let x2 = Math.randInt(w) + x;
+                let y2 = Math.randInt(h) + y;
+            }
+        }
+
+        const Color = {
+            white: 'rgba(255, 255, 255, 255)',
+            black: 'rgba(0, 0, 0, 255)',
+            red: 'rgba(255, 0, 0, 255)',
+            green: 'rgba(0, 255, 0, 255)',
+            blue: 'rgba(0, 0, 255, 255)'
+        };
+
+        const drawFont = 'normal normal 14px Monospaced';
+        const numDirections = 8;
+        const directions = [[-1, -1], [0, -1], [1, -1], [1, 0], [1, 1], [0, 1], [-1, 1], [-1, 0], [0, 0]];
+        const facings = [[0, 7, 6], [1, 8, 5], [2, 3, 4]];
+        const unitDirections = directions.map(([x, y]) => {
+            const d = Math.sqrt(Math.pow(x, 2) + Math.pow(y, 2));
+            return [
+                x / d,
+                y / d,
+            ];
+        });
+        let drawPanel;
+        const width = 50;
+        const height = 50;
+        const map = new Array(width).fill(undefined).map(() => new Array(height).fill(undefined));
+        const floorChar = '.';
+        const monsters = [];
+        let player;
+        const monsterSees = new Array(width).fill(undefined).map(() => new Array(height).fill(0));
+        let level = 0;
+        const mtypes = [
+            [3, 4, 'a', "ant"],
+            [5, 6, 'd', "dog"],
+            [7, 8, 'k', "kobol"],
+            [3, 12, 'g', "goblin"],
+            [10, 6, 'h', "hobbit"],
+            [7, 14, 'x', "xan"],
+            [15, 30, 'D', "dragon"],
+        ];
+
+        function tick() {
+            monsterSees.forEach((col, y) => col.forEach((_, x) => monsterSees[x][y] = 0));
+            player.see();
+            monsters.forEach(m => {
+                m.ai();
+                if (player.sees[m.x][m.y])
+                    m.see();
+            });
+        }
+
+        function genMap() {
+            map.forEach((col, y) => col.forEach((_, x) => map[x][y] = '#'));
+            const connectedRooms = [];
+            const rooms = [];
+            const nrooms = Math.randInt(4) + 5;
+            for (let i = 0; i < nrooms; i++) {
+                rooms.push(new Room());
+            }
+            connectedRooms.push(new Room());
+            while (rooms.length) {
+                const a = Math.randInt(connectedRooms.length);
+                const b = Math.randInt(rooms.length);
+                connectedRooms[a].createPathTo(rooms[b]);
+                connectedRooms.push(rooms[b]);
+                rooms.splice(b, 1);
+            }
+
+            for (let i = 0; i < level + 10; i++) {
+                map[Math.randInt(width)][Math.randInt(height)] = '$';
+            }
+
+            for (let i = 0; i < 10; i++) {
+                map[Math.randInt(width)][Math.randInt(height)] = '!';
+            }
+
+            let hardStop = 100;
+            while (--hardStop > 0) {
+                const x = Math.randInt(width);
+                const y = Math.randInt(height);
+                if (map[x][y] === floorChar) {
+                    map[x][y] = '>';
+                    break;
+                }
+            }
+
+            const c = nrooms + Math.randInt(nrooms + (level / 4));
+            for (let i = 0; i < c; i++) {
+                const ind = Math.min(
+                    parseInt(Math.abs((Math.random() + Math.random() - 1)) * (level + 2)),
+                    mtypes.length - 1
+                );
+
+                const t = new Monster(...mtypes[ind]);
+                t.ai_interest = Math.random() / (ind + 2);
+                monsters.push(t);
+                t.place();
+            }
+            level++;
+        }
+
+        genMap();
+        player = new Character();
+        drawPanel = new DrawPanel();
+        monsters.push(player);
+        player.reset();
+    }
+
+    console.log(new  RogueApp());
+</script>
+</body>
+</html>
