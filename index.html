@@ -14,28 +14,23 @@
 <body>
 <canvas id="panel"></canvas>
 <script>
-    Math.randInt = function (max, min = 0) {
-        return parseInt(Math.random() * (max - min)) + min;
-    };
-
-    Math.clamp = function (number, max, min) {
-        return Math.max(min, Math.min(number, max));
-    };
+    function color(red, green, blue, alpha = 1) {
+        return `rgba(${[red, green, blue, alpha].map(v => v * 255).join(',')})`;
+    }
 
     function RogueApp() {
         class DrawPanel {
             constructor() {
-                this.canvas = document.querySelector('#panel');
-                this.canvas.width = width * cellSize;
-                this.canvas.height = (height + 6) * cellSize;
-                const ctx = this.canvas.getContext('2d');
-                ctx.textBaseline = 'top';
+                this.panel = document.querySelector('#panel');
+                const ctx = this.panel.getContext('2d');
+                this.panel.width = width * 11;
+                this.panel.height = (height + 5) * 11;
                 ctx.font = drawFont;
-                window.addEventListener('keypress', this.keypress.bind(this));
+                window.addEventListener('keypress', DrawPanel.keypress);
                 window.requestAnimationFrame(this.paintComponent.bind(this, ctx));
             }
 
-            keypress({key}) {
+            static keypress({key}) {
                 switch (key) {
                     case 'w':
                         player.move(0, -1);
@@ -59,118 +54,120 @@
             }
 
             paintComponent(ctx) {
-                const bounds = this.getBounds();
-                ctx.clearRect(...bounds);
-                ctx.fillStyle = Color.toString(Color.black);
-                ctx.fillRect(...bounds);
+                const rbounds = this.getBounds();
+
+                ctx.clearRect(...rbounds);
+                ctx.fillStyle = color(0, 0, 0);
+                ctx.fillRect(...rbounds);
 
                 if (player.health < 0) {
-                    ctx.fillStyle = Color.toString(Color.red);
-                    const txt = `Dead & buried on level ${level} with $${player.score}`;
-                    ctx.fillText(txt, (bounds[2] / 2) - (ctx.measureText(txt).width / 2), bounds[3] / 2);
+                    ctx.fillStyle = color(1, 0, 0);
+                    const txt = "Dead & buried on level " + level + " with $" + player.score;
+                    ctx.fillText(txt, (600 / 11 - txt.length) * 11 / 2, (height + 1) * 11 / 2);
                     return;
                 }
 
-                map.forEach((row, x) => row.some((c, y) => {
-//                    if (!player.seen[x][y]) return true;
+                for (let y = 0; y < height; y++) {
+                    for (let x = 0; x < width; x++) {
+                        let tileColor;
+                        let c = map[x][y];
+                        if (player.seen[x][y] === false || c === ' ') continue;
 
-                    //lighting
-                    let light = 1;
-                    if (player.sees[x][y]) {
-                        const dx = player.x - x;
-                        const dy = player.y - y;
-                        const rr = (Math.pow(dx, 2) + Math.pow(dy, 2));
-                        light = Math.min(1, 0.5 + 4 / (rr - 1));
-                    } else {
-                        light = 0.5;
-                    }
+                        // lighting
+                        let light = 1;
+                        if (player.sees[x][y]) {
+                            const dx = player.x - x;
+                            const dy = player.y - y;
+                            const rr = (dx * dx + dy * dy);
+                            light = rr > 1 ? 0.5 + 4 / (rr - 1) : 1;
+                            if (light > 1) light = 1;
+                        } else
+                            light = 0.25;
 
-                    // colouring
-                    let tileColor = Color.black;
-                    if (c === '$') {
-                        tileColor = Color.yellow;
-                    } else if (carnage.includes(c)) {
-                        tileColor = Color.red;
-                    } else if (c === '!') {
-                        tileColor = Color.green;
-                    } else if (c === '@') {
-                        tileColor = Color.blue;
-                    } else {
-                        tileColor = Color.white;
-                    }
+                        // colouring
+                        if (c === '$')
+                            tileColor = [1.0, 1.0, 0, 1.0];
+                        else if (c === ',' || c === ';' || c === '\'' || c === '`')
+                            tileColor = [1.0, 0, 0, 1.0];
+                        else if (c === '!')
+                            tileColor = [0, 1.0, 0, 1.0];
+                        else
+                            tileColor = [1.0, 1.0, 1.0, 1.0];
 
-                    if (true || player.sees[x][y]) {
-                        monsters.forEach(m => {
-                            if (m.x === x && m.y === y) {
-                                c = m.symbol;
-                                if (c === '@') {
-                                    light = 1;
-                                    tileColor = Color.blue;
-                                } else {
-                                    tileColor = Color.red;
+                        if (player.sees[x][y]) {
+                            monsters.some(m => {
+                                if (m.x === x && m.y === y) {
+                                    tileColor = [1.0, 0, 0, 1.0];
+                                    c = m.symbol;
+                                    if (c === '@')
+                                        tileColor = [0.4, 0.6, 1.0, 1.0];
+                                    return true;
                                 }
-                            }
-                        });
+                            });
+                        }
+
+                        tileColor = tileColor.map(v => v * light);
+
+                        // drawing
+                        ctx.fillStyle = color(...tileColor);
+                        ctx.fillText(c, x * 11, y * 11);
                     }
+                }
 
-                    ctx.fillStyle = Color.toString(tileColor.map(v => v * light));
-                    ctx.fillText(c, x * cellSize, y * cellSize);
-                }));
+                ctx.fillStyle = color(...whiteColor);
+                ctx.fillText("Score: " + player.score, 1 * 11, (height + 1) * 11);
+                ctx.fillText("Lvl:   " + level, 1 * 11, (height + 2) * 11);
+                ctx.fillText("Health: " + player.health + "/" + player.maxhealth, 16 * 11, (height + 1) * 11);
+                ctx.fillText("Expr:   " + (1 + player.experience / 20) + ":" + player.experience, 16 * 11, (height + 2) * 11);
 
-                ctx.fillStyle = Color.toString(Color.white);
-                [
-                    `Score: ${player.score}`,
-                    `Lvl: ${level}`,
-                    `Health: ${player.health} / ${player.maxHealth}`,
-                    `Expr: ${player.experience / 20} / ${player.experience}`
-                ].forEach((txt, i) => {
-                    ctx.fillText(txt, 0, (height + i + 1) * cellSize);
-                });
-                player.status.forEach(([txt, color], i) => {
-                    ctx.fillStyle = Color.toString(color);
-                    ctx.fillText(txt, width * cellSize - ctx.measureText(txt).width, (height + i + 1) * cellSize);
-                });
+                // status
+                for (let i = 0; i < 3; i++) {
+                    ctx.fillStyle = color(player.statusColor[i]);
+                    ctx.fillText(player.status[i], 30 * 11, (height + i + 1) * 11);
+                }
 
                 window.requestAnimationFrame(this.paintComponent.bind(this, ctx));
             }
 
             getBounds() {
-                const {width, height} = this.canvas;
-                return [0, 0, width, height];
+                return [0, 0, this.panel.width, this.panel.height];
             }
 
-            setPreferredSize(displayWidth, displayHeight) {
-                this.canvas.style.width = `${displayWidth}px`;
-                this.canvas.style.height = `${displayHeight}px`;
+            setPreferredSize(w, h) {
+                this.panel.style.width = `${w}px`;
+                this.panel.style.height = `${h}px`;
             }
         }
 
         class Monster {
-            constructor(health, strength, symbol, name) {
-                this.maxHealth = health;
-                this.health = health;
-                this.strength = strength;
-                this.symbol = symbol;
-                this.name = name;
+            constructor(h, str, s, n) {
+                this.x = 10;
+                this.y = 10;
                 this.experience = 0;
-                this.ai_interest = 0;
-                this.tx = false;
-                this.ty = false;
+                this.ai_interest = 0.3;
+                this.tx = null;
+                this.ty = null;
                 this.memory = false;
-                this.seeRadius = 7;
+                this.maxhealth = h;
+                this.health = h;
+                this.strength = str;
+                this.symbol = s;
+                this.name = n;
+                this.experience = 0;
             }
 
             place() {
-                const floor = map.reduce((floor, row, x) => row.reduce((floor, c, y) => {
-                    return c === floorChar ? floor.concat([[x, y]]) : floor;
-                }, floor), []);
-                const [x, y] = floor[Math.randInt(floor.length)];
-                this.x = x;
-                this.y = y;
+                while (true) {
+                    this.x = parseInt(Math.random() * width);
+                    this.y = parseInt(Math.random() * height);
+                    if (map[this.x][this.y] === floorchar)
+                        break;
+                }
             }
 
             lineOfSight(x2, y2) {
-                let {x, y} = this;
+                const {x, y} = this;
+                // pick corner nearest monster
                 if (x2 < x) x2 += 0.5;
                 else if (x2 > x) x2 -= 0.5;
                 if (y2 < y) y2 += 0.5;
@@ -178,7 +175,6 @@
 
                 let dx = x2 - x;
                 let dy = y2 - y;
-
                 let l = Math.max(Math.abs(dx), Math.abs(dy));
                 dx /= l;
                 dy /= l;
@@ -187,8 +183,8 @@
                 let yy = y;
 
                 while (l > 0) {
-                    let ix = parseInt(xx + 0.5);
-                    let iy = parseInt(yy + 0.5);
+                    const ix = parseInt(xx + 0.5);
+                    const iy = parseInt(yy + 0.5);
 
                     if (x2 === ix && y2 === iy) break;
                     if (!(x === ix && y === iy) && map[ix][iy] === '#')
@@ -207,43 +203,58 @@
 
             damage(d, m) {
                 this.health -= d;
+                const {health, name, strength, x, y} = this;
+                if (health < 0) {
+                    // death
+                    const fl = name.charAt(0);
+                    player.setStatus(((fl === 'a') ? "An " : "A ") + this.name + " dies.", whiteColor);
+                    monsters.splice(monsters.indexOf(this, 1));
 
-                if (this.health < 0) {
-                    player.setStatus(`${this.name} killed`, Color.red);
-                    monsters.splice(monsters.indexOf(this), 1);
-                    m.gainExperience(Math.randInt(this.strength));
+                    // experience
+                    m.gainExperience(parseInt(Math.random() * strength));
                 }
-
-                if (map[this.x][this.y] === floorChar) {
-                    map[this.x][this.y] = carnage[Math.randInt(carnage.length)];
+                // carnage
+                if (map[x][y] === floorchar) {
+                    switch (parseInt(Math.random() * 3)) {
+                        case 0:
+                            map[x][y] = ',';
+                            break;
+                        case 1:
+                            map[x][y] = '\'';
+                            break;
+                        case 2:
+                            map[x][y] = '`';
+                            break;
+                    }
                 }
             }
 
             move(dx, dy) {
-                const tx = this.x + dx;
-                const ty = this.y + dy;
-                if (tx < 0 || tx > width) return false;
-                if (ty < 0 || ty > height) return false;
-                if (map[tx][ty] === '#') return false;
+                const {x, y, strength, experience} = this;
+                if (dx === 0 && dy === 0) return;
+                if (x + dx < 0 || x + dx >= width) return;
+                if (y + dy < 0 || y + dy >= height) return;
 
+                if (map[x + dx][y + dy] === '#') return;
+
+                // if walk into a monster -- do damage
                 for (let i = 0; i < monsters.length; i++) {
                     const m = monsters[i];
-                    if (m === this) continue;
-                    if (tx === m.x && ty === m.y) {
-                        m.damage(Math.randInt(this.strength + this.experience / 20), this);
-                        return true;
+                    if (m.x === x + dx && m.y === y + dy) {
+                        m.damage(parseInt(Math.random() * (strength + (experience / 20))), this);
+                        return;
                     }
                 }
 
-                this.x = tx;
-                this.y = ty;
-
-                return true;
+                this.x += dx;
+                this.y += dy;
             }
 
             ai() {
+                const {memory, ai_interest} = this;
+                // if can see/remember player move towards them
                 const see = this.lineOfSight(player.x, player.y);
-                if ((see || this.memory) && Math.random() > this.ai_interest) {
+                if ((see || memory) && Math.random() > ai_interest) {
                     if (see) {
                         this.memory = true;
                         this.tx = player.x;
@@ -252,91 +263,125 @@
                     const {x, y, tx, ty} = this;
                     const dx = tx - x;
                     const dy = ty - y;
-                    const ddx = dx > 0 ? 1 : (dx < 0 ? -1 : 0);
-                    const ddy = dy > 0 ? 1 : (dy < 0 ? -1 : 0);
-                    const attempt = new Array(3).fill(undefined).map(v => [ddx, ddy]);
-                    if (Math.pow(dx, 2) > Math.pow(dy, 2)) {
+
+                    // attempts to move straight or diagonally
+                    let ddx = dx > 0 ? 1 : (dx < 0 ? -1 : 0);
+                    let ddy = dy > 0 ? 1 : (dy < 0 ? -1 : 0);
+
+                    const attempt = [[], [], []];
+
+                    for (let c = 0; c < 3; c++) {
+                        attempt[c][0] = ddx;
+                        attempt[c][1] = ddy;
+                    }
+                    if (dx * dx > dy * dy) {
                         attempt[1][1] = 0;
                         attempt[2][0] = 0;
                     } else {
                         attempt[1][0] = 0;
                         attempt[2][1] = 0;
                     }
-                    attempt.some(([ddx, ddy]) => this.move(ddx, ddy));
-                } else {
-                    this.move(Math.randInt(3) - 1, Math.randInt(3) - 1);
-                }
+
+                    for (let c = 0; c < 3; c++) {
+                        ddx = attempt[c][0];
+                        ddy = attempt[c][1];
+                        if (map[x + ddx][y + ddy] !== '#') break;
+                    }
+
+                    this.move(ddx, ddy);
+                } else
+                    this.move(parseInt(Math.random() * 3) - 1, parseInt(Math.random() * 3) - 1);
             }
         }
 
         class Character extends Monster {
             constructor() {
-                super(20, 5, '@', 'player');
+                super(20, 5, '@', "player");
+                this.seen = new Array(50).fill(undefined).map(col => new Array(50).fill(undefined));
+                this.sees = new Array(50).fill(undefined).map(col => new Array(50).fill(undefined));
                 this.score = 0;
                 this.rest = 0;
                 this.seeRadius = 7;
-                this.status = [];
-                this.seen = new Array(width).fill(undefined).map((_, x, row) => row[x] = new Array(height).fill(undefined));
-                this.sees = new Array(width).fill(undefined).map((_, x, row) => row[x] = new Array(height).fill(undefined));
+
+                this.status = [" ", " ", " "];
+                this.statusColor = [whiteColor, whiteColor, whiteColor];
             }
 
             reset() {
                 super.place();
-                this.seen.map((row, x) => row.forEach((_, y) => this.seen[x][y] = false));
+                for (let y = 0; y < height; y++) {
+                    for (let x = 0; x < width; x++)
+                        this.seen[x][y] = false;
+                }
                 this.see();
             }
 
-            setStatus(text, color = Color.white) {
-                this.status = [[text, color]].concat(this.status).slice(0, 4);
+            setStatus(s, c) {
+                for (let i = 1; i >= 0; i--) {
+                    this.statusColor[i + 1] = this.statusColor[i];
+                    this.status[i + 1] = this.status[i];
+                }
+                this.status[0] = s;
+                this.statusColor[0] = c;
             }
 
             see() {
-                this.sees.map((row, x) => row.forEach((_, y) => this.sees[x][y] = false));
-                for (let x = this.x - this.seeRadius; x < this.x + this.seeRadius; x++) {
-                    for (let y = this.y - this.seeRadius; y < this.y + this.seeRadius; y++) {
-                        const i = Math.clamp(x, width - 1, 0);
-                        const j = Math.clamp(y, height - 1, 0);
-                        this.sees[i][j] = true;
-                        this.seen[i][j] = true;
+                const {seeRadius, y, x} = this;
+                for (let y = 0; y < height; y++) {
+                    for (let x = 0; x < width; x++)
+                        this.sees[x][y] = false;
+                }
+
+                for (let yy = -seeRadius; yy < seeRadius; yy++) {
+                    if (y + yy < 0 || y + yy >= height) continue;
+                    for (let xx = -seeRadius; xx < seeRadius; xx++) {
+                        if (xx * xx + yy * yy > seeRadius * seeRadius) continue;
+                        if (x + xx < 0 || x + xx >= width) continue;
+                        if (y + yy < 0 || y + yy >= height) continue;
+                        if (this.lineOfSight(x + xx, y + yy)) {
+                            this.sees[x + xx][y + yy] = true;
+                            this.seen[x + xx][y + yy] = true;
+                        }
                     }
                 }
             }
 
             gainExperience(e) {
-                if (this.experience / 20 < (this.experience + e) / 20) {
-                    this.setStatus(`Gained a level`, Color.yellow);
-                    this.maxHealth += 2;
+                const {experience} = this;
+                if (experience / 20 < (experience + e) / 20) {
+                    this.setStatus("Gained a new level.", [255, 255, 0, 255]);
+                    this.maxhealth += 2;
                 }
                 this.experience += e;
             }
 
             damage(d, m) {
                 super.damage(d, m);
-                this.setStatus(`Hurt by ${m.name}`, Color.red);
+                this.setStatus("Hurt by an " + m.name + ".", whiteColor);
             }
 
             move(dx, dy) {
+                const {x, y} = this;
                 super.move(dx, dy);
-                switch (map[this.x][this.y]) {
-                    case '$':
-                        map[this.x][this.y] = floorChar;
-                        const gold = Math.randInt(20) + 2;
-                        this.setStatus(`Got $${gold}`, Color.yellow);
-                        this.score += gold;
-                        break;
-                    case '!':
-                        map[this.x][this.y] = floorChar;
-                        this.health = Math.clamp(this.health + Math.randInt(5) + 5, this.maxHealth, 0);
-                        this.setStatus(`Drank a potion.`, Color.green);
-                        break;
+
+                if (map[x][y] === '$') {
+                    map[x][y] = floorchar;
+                    const dscore = parseInt(Math.random() * 20) + 2;
+                    this.setStatus("Got $" + dscore + ".", whiteColor);
+                    this.score += dscore;
+                }
+                if (map[x][y] === '!') {
+                    map[x][y] = floorchar;
+                    this.health += parseInt(Math.random() * 5 + 5);
+                    if (this.health > this.maxhealth) this.health = this.maxhealth;
+                    this.setStatus("Drank a healing potion.", whiteColor);
                 }
 
-                if (this.health < this.maxHealth) {
+                if (this.health < this.maxhealth)
                     this.rest++;
-                }
                 if (this.rest > 20) {
                     this.rest = 0;
-                    this.health = Math.clamp(this.health + 1, this.maxHealth, 0);
+                    this.health++;
                 }
                 this.see();
                 tick();
@@ -347,7 +392,7 @@
                 monsters.push(player);
                 genMap();
                 this.reset();
-                this.setStatus(`Went downstairs`);
+                this.setStatus("Went downstairs.", whiteColor);
             }
 
             ai() {
@@ -356,124 +401,141 @@
 
         class Room {
             constructor() {
-                let hardStop = 100;
-                while (--hardStop > 0) {
-                    const x1 = Math.randInt(width - 14) + 2;
-                    const y1 = Math.randInt(height - 14) + 2;
-                    const x2 = Math.randInt(10) + 3 + x1;
-                    const y2 = Math.randInt(10) + 3 + y1;
+                while (true) {
+                    this.x = parseInt(Math.random() * (width - 13)) + 2;
+                    this.y = parseInt(Math.random() * (height - 13)) + 2;
+                    this.w = parseInt(Math.random() * 10) + 3;
+                    this.h = parseInt(Math.random() * 10) + 3;
 
-                    const onlyWalls = map.slice(x1 - 1, x2 + 1).reduce((onlyWalls, row) => {
-                        return onlyWalls && !row.slice(y1 - 1, y2 + 1).includes(floorChar);
-                    }, true);
+                    const {x, y, w, h} = this;
 
-                    if (onlyWalls) {
-                        map.slice(x1, x2).forEach((row, i) => {
-                            return row.slice(y1, y2).forEach((_, j) => {
-                                return map[i + x1][j + y1] = floorChar;
-                            });
-                        });
-                        this.x1 = x1;
-                        this.x2 = x2;
-                        this.y1 = y1;
-                        this.y2 = y2;
-                        break;
+                    let clear = true;
+                    for (let yy = y - 1; yy < y + h + 1; yy++) {
+                        for (let xx = x - 1; xx < x + w + 1; xx++) {
+                            if (xx >= width || yy >= height || map[xx][yy] === floorchar) {
+                                clear = false;
+                                break;
+                            }
+                        }
+                        if (!clear) break;
                     }
+                    if (!clear) continue;
+
+                    for (let yy = y; yy < y + h; yy++) {
+                        for (let xx = x; xx < x + w; xx++) {
+                            map[xx][yy] = floorchar;
+                        }
+                    }
+                    break;
                 }
             }
 
-            createPathTo(that) {
-                let horizontal = Math.random() > 0.5;
-                let x1 = Math.max(0, Math.randInt(this.x2, this.x1));
-                let y1 = Math.max(0, Math.randInt(this.y2, this.y1));
-                const x2 = Math.min(width, Math.randInt(that.x2, that.x1));
-                const y2 = Math.min(height, Math.randInt(that.y2, that.y1));
-                const dx = x2 - x1 > 0 ? 1 : (x2 - x1 < 0 ? -1 : 0);
-                const dy = y2 - y1 > 0 ? 1 : (y2 - y1 < 0 ? -1 : 0);
+            createPathTo(b) {
+                const {w, h} = this;
+                let x = parseInt(Math.random() * (w)) + this.x;
+                let y = parseInt(Math.random() * (h)) + this.y;
+                const x2 = parseInt(Math.random() * (b.w)) + b.x;
+                const y2 = parseInt(Math.random() * (b.h)) + b.y;
 
-                while (x1 !== x2 || y1 !== y2) {
-                    if (y1 === y2 || (horizontal && x1 !== x2)) {
-                        x1 += dx;
-                    } else {
-                        y1 += dy;
-                    }
-                    map[x1][y1] = floorChar;
-                    if (Math.random() < 0.1) {
+                let dx = x2 - x;
+                let dy = y2 - y;
+                dx = dx > 0 ? 1 : (dx < 0 ? -1 : 0);
+                dy = dy > 0 ? 1 : (dy < 0 ? -1 : 0);
+                let horizontal = (Math.random() > 0.5);
+
+                while (x !== x2 || y !== y2) {
+                    if (y === y2 || (horizontal && x !== x2))
+                        x += dx;
+                    else
+                        y += dy;
+
+                    if (!(x > 0 && y > 0 && x < width && y < height)) break;
+                    map[x][y] = floorchar;
+
+                    if (Math.random() < 0.1)
                         horizontal = !horizontal;
-                    }
                 }
             }
         }
 
-        const cellSize = 11;
         const drawFont = 'normal normal 14px Monospaced';
         let drawPanel;
         const width = 50;
         const height = 50;
-        const map = new Array(width).fill(undefined).map((_, x, row) => row[x] = new Array(height).fill(undefined));
-        const floorChar = '\u00B7';
+        const map = new Array(width).fill(undefined).map(() => new Array(height).fill(undefined));
+        const floorchar = '\u00B7';
         const monsters = [];
-        const carnage = [',', ';', '\\', '`'];
         let player;
-        const Color = {
-            toString: values => `rgb(${values.map(v => parseInt(v * 255)).join(', ')})`,
-            white: [1, 1, 1],
-            black: [0, 0, 0],
-            red: [1, 0, 0],
-            green: [0, 1, 0],
-            blue: [0.4, 0.6, 1],
-            yellow: [1, 1, 0],
-        };
+        const whiteColor = [255, 255, 255, 255];
         let level = 0;
         const mtypes = [
-            [3, 2, 'a', 'ant'],
-            [5, 3, 'd', 'dog'],
-            [7, 4, 'k', 'kobol'],
-            [3, 6, 'g', 'goblin'],
-            [10, 3, 'h', 'hobbit'],
-            [7, 7, 'x', 'xan'],
-            [15, 15, 'D', 'dragon'],
+            new Monster(3, 2, 'a', "ant"),
+            new Monster(5, 3, 'd', "dog"),
+            new Monster(7, 4, 'k', "kobol"),
+            new Monster(3, 6, 'g', "goblin"),
+            new Monster(10, 3, 'h', "hobbit"),
+            new Monster(7, 7, 'x', "xan"),
+            new Monster(15, 15, 'D', "dragon")
         ];
 
         function tick() {
-            monsters.forEach(m => m.ai());
+            for (let i = 0; i < monsters.length; i++) {
+                const m = monsters[i];
+                m.ai();
+            }
         }
 
         function genMap() {
-            map.forEach((row, x) => row.forEach((_, y) => map[x][y] = '#'));
+            for (let y = 0; y < height; y++) {
+                for (let x = 0; x < width; x++)
+                    map[x][y] = '#';
+            }
+
             const connectedRooms = [];
             const rooms = [];
-            const nrooms = 1;// Math.randInt(4) + 5;
+
+            const nrooms = parseInt(Math.random() * 4) + 5;
             for (let i = 0; i < nrooms; i++) {
                 rooms.push(new Room());
             }
             connectedRooms.push(new Room());
-            while (rooms.length) {
-                const a = Math.randInt(connectedRooms.length);
-                const b = Math.randInt(rooms.length);
+            while (rooms.length > 0) {
+                const a = parseInt(Math.random() * connectedRooms.length);
+                const b = parseInt(Math.random() * rooms.length);
                 connectedRooms[a].createPathTo(rooms[b]);
-                connectedRooms.push(rooms.splice(b, 1)[0]);
+                connectedRooms.push(rooms[b]);
+                rooms.splice(b, 1);
             }
 
             // gold
             for (let i = 0; i < (level + 10); i++) {
-                map[Math.randInt(width - 2) + 1][Math.randInt(height - 2) + 1] = '$';
+                const x = parseInt(Math.random() * width);
+                const y = parseInt(Math.random() * height);
+                map[x][y] = '$';
             }
             // potions
             for (let i = 0; i < 10; i++) {
-                map[Math.randInt(width - 2) + 1][Math.randInt(height - 2) + 1] = '!';
+                const x = parseInt(Math.random() * width);
+                const y = parseInt(Math.random() * height);
+                map[x][y] = '!';
             }
             // down staircase
-            const floor = map.reduce((floor, row, x) => row.reduce((floor, c, y) => {
-                return c === floorChar ? floor.concat([[x, y]]) : floor;
-            }, floor), []);
-            const [exitX, exitY] = floor[Math.randInt(floor.length)];
-            map[exitX][exitY] = '>';
+            while (true) {
+                const x = parseInt(Math.random() * width);
+                const y = parseInt(Math.random() * height);
+                if (map[x][y] === floorchar) {
+                    map[x][y] = '>';
+                    break;
+                }
+            }
+
             // monsters
-            const c = nrooms + Math.randInt(nrooms + level / 4);
+            const c = nrooms + parseInt(Math.random() * (nrooms + (level / 4)));
             for (let i = 0; i < c; i++) {
-                const ind = Math.min(mtypes.length, parseInt(Math.abs((Math.random() + Math.random() - 1) * (level + 2))));
-                const t = new Monster(...mtypes[ind]);
+                let ind = parseInt(Math.abs((Math.random() + Math.random() - 1)) * (level + 2));
+                if (ind >= mtypes.length) ind = mtypes.length - 1;
+                let t = mtypes[ind];
+                t = new Monster(t.health, t.strength, t.symbol, t.name);
                 t.ai_interest = Math.random() / (ind + 2);
                 monsters.push(t);
                 t.place();
@@ -483,10 +545,14 @@
 
         function init() {
             drawPanel = new DrawPanel();
-            drawPanel.setPreferredSize(425, 425);
+            drawPanel.setPreferredSize(300, 300);
+
             genMap();
+
             player = new Character();
+
             monsters.push(player);
+
             player.reset();
         }
 
