@@ -14,56 +14,110 @@
 <body>
 <canvas id="panel"></canvas>
 <script>
-    function color(red, green, blue, alpha = 1) {
-        return `rgba(${[red, green, blue, alpha].map(v => v * 255).join(',')})`;
-    }
-
-    function RogueApp() {
-        class DrawPanel {
-            constructor() {
-                this.panel = document.querySelector('#panel');
-                const ctx = this.panel.getContext('2d');
-                this.panel.width = width * 11;
-                this.panel.height = (height + 5) * 11;
-                ctx.font = drawFont;
-                window.addEventListener('keypress', DrawPanel.keypress);
-                window.requestAnimationFrame(this.paintComponent.bind(this, ctx));
+    function RogueApplet() {
+        class Color {
+            constructor(red, green, blue, alpha = 1) {
+                this.colors = [red, green, blue];
+                this.alpha = alpha;
             }
 
-            static keypress({key}) {
+            setAlpha(alpha) {
+                this.alpha = Math.max(Math.min(alpha, 1), 0);
+                return this;
+            }
+
+            toString() {
+                return `rgba(${this.colors.map(v => parseInt(v * 255)).concat([this.alpha])})`;
+            }
+        }
+
+        Color.black = new Color(0, 0, 0);
+        Color.white = new Color(1, 1, 1);
+        Color.yellow = new Color(1, 1, 0);
+        Color.red = new Color(1, 0, 0);
+        Color.green = new Color(0, 1, 0);
+        Color.blue = new Color(0, 0, 1);
+
+        class DrawPanel {
+            constructor() {
+                this.canvas = document.querySelector('#panel');
+                let ctx = this.canvas.getContext('2d');
+                window.addEventListener('keypress', DrawPanel.keyPressed.bind(this));
+                window.requestAnimationFrame(this.paintComponent.bind(this, ctx))
+            }
+
+            static keyPressed({key}) {
                 switch (key) {
+                    case 'y':
+                    case '7':
+                        player.move(-1, -1);
+                        break;
                     case 'w':
+                    case 'k':
+                    case '8':
                         player.move(0, -1);
                         break;
+                    case 'u':
+                    case '9':
+                        player.move(1, -1);
+                        break;
                     case 'd':
+                    case 'l':
+                    case '6':
                         player.move(1, 0);
                         break;
+                    case 'n':
+                    case '3':
+                        player.move(1, 1);
+                        break;
+                    case 'j':
+                    case '2':
                     case 's':
                         player.move(0, 1);
                         break;
+                    case 'b':
+                    case '1':
+                        player.move(-1, 1);
+                        break;
+                    case 'h':
+                    case '4':
                     case 'a':
                         player.move(-1, 0);
                         break;
-                    case 'f':
+                    case '.':
+                    case '5':
                         player.move(0, 0);
                         break;
                 }
-                if (map[player.x][player.y] === '>') {
+                if (key === '>' && map[player.x][player.y] === '>')
                     player.goDown();
-                }
+            }
+
+            setPreferredSize(w, h) {
+                this.canvas.width = w;
+                this.canvas.height = h;
+            }
+
+            getBounds() {
+
+                let {width, height} = this.canvas;
+                return [0, 0, width, height];
             }
 
             paintComponent(ctx) {
-                const rbounds = this.getBounds();
+                let rbounds = this.getBounds();
+                ctx.font = drawFont;
+                ctx.textBaseline = 'hanging';
+                ctx.textAlign = 'left';
 
                 ctx.clearRect(...rbounds);
-                ctx.fillStyle = color(0, 0, 0);
+                ctx.fillStyle = Color.black;
                 ctx.fillRect(...rbounds);
 
                 if (player.health < 0) {
-                    ctx.fillStyle = color(1, 0, 0);
-                    const txt = "Dead & buried on level " + level + " with $" + player.score;
-                    ctx.fillText(txt, (600 / 11 - txt.length) * 11 / 2, (height + 1) * 11 / 2);
+                    ctx.fillStyle = Color.red;
+                    let txt = `Dead & buried on level ${level} with $${player.score}`;
+                    ctx.fillText(txt, (600 / 11 - ctx.measureText(txt).width) * 11 / 2, (height + 1) * 11 / 2);
                     return;
                 }
 
@@ -76,9 +130,9 @@
                         // lighting
                         let light = 1;
                         if (player.sees[x][y]) {
-                            const dx = player.x - x;
-                            const dy = player.y - y;
-                            const rr = (dx * dx + dy * dy);
+                            let dx = player.x - x;
+                            let dy = player.y - y;
+                            let rr = (dx * dx + dy * dy);
                             light = rr > 1 ? 0.5 + 4 / (rr - 1) : 1;
                             if (light > 1) light = 1;
                         } else
@@ -86,56 +140,54 @@
 
                         // colouring
                         if (c === '$')
-                            tileColor = [1.0, 1.0, 0, 1.0];
+                            tileColor = Color.yellow;
                         else if (c === ',' || c === ';' || c === '\'' || c === '`')
-                            tileColor = [1.0, 0, 0, 1.0];
+                            tileColor = Color.red;
                         else if (c === '!')
-                            tileColor = [0, 1.0, 0, 1.0];
+                            tileColor = Color.green;
                         else
-                            tileColor = [1.0, 1.0, 1.0, 1.0];
+                            tileColor = Color.white;
 
                         if (player.sees[x][y]) {
                             monsters.some(m => {
                                 if (m.x === x && m.y === y) {
-                                    tileColor = [1.0, 0, 0, 1.0];
+                                    tileColor = Color.red;
                                     c = m.symbol;
                                     if (c === '@')
-                                        tileColor = [0.4, 0.6, 1.0, 1.0];
+                                        tileColor = Color.blue;
                                     return true;
                                 }
                             });
                         }
 
-                        tileColor = tileColor.map(v => v * light);
+                        tileColor.setAlpha(light);
 
                         // drawing
-                        ctx.fillStyle = color(...tileColor);
+                        ctx.fillStyle = tileColor;
                         ctx.fillText(c, x * 11, y * 11);
                     }
                 }
 
-                ctx.fillStyle = color(...whiteColor);
-                ctx.fillText("Score: " + player.score, 1 * 11, (height + 1) * 11);
-                ctx.fillText("Lvl:   " + level, 1 * 11, (height + 2) * 11);
-                ctx.fillText("Health: " + player.health + "/" + player.maxhealth, 16 * 11, (height + 1) * 11);
-                ctx.fillText("Expr:   " + (1 + player.experience / 20) + ":" + player.experience, 16 * 11, (height + 2) * 11);
+                // draw player info
+                ctx.fillStyle = Color.white;
+
+                let layout = "Score: " + player.score;
+                ctx.fillText(layout, 11, (height + 1) * 11);
+                layout = "Lvl:   " + level;
+                ctx.fillText(layout, 11, (height + 2) * 11);
+
+                layout = "Health: " + player.health + "/" + player.maxhealth;
+                ctx.fillText(layout, 16 * 11, (height + 1) * 11);
+                layout = "Expr:   " + (1 + player.experience / 20) + ":" + player.experience;
+                ctx.fillText(layout, 16 * 11, (height + 2) * 11);
 
                 // status
                 for (let i = 0; i < 3; i++) {
-                    ctx.fillStyle = color(player.statusColor[i]);
-                    ctx.fillText(player.status[i], 30 * 11, (height + i + 1) * 11);
+                    ctx.fillStyle = player.statusColor[i];
+                    layout = player.status[i];
+                    ctx.fillText(layout, 30 * 11, (height + i + 1) * 11);
                 }
-
-                window.requestAnimationFrame(this.paintComponent.bind(this, ctx));
-            }
-
-            getBounds() {
-                return [0, 0, this.panel.width, this.panel.height];
-            }
-
-            setPreferredSize(w, h) {
-                this.panel.style.width = `${w}px`;
-                this.panel.style.height = `${h}px`;
+                window.requestAnimationFrame(this.paintComponent.bind(this, ctx))
             }
         }
 
@@ -143,7 +195,6 @@
             constructor(h, str, s, n) {
                 this.x = 10;
                 this.y = 10;
-                this.experience = 0;
                 this.ai_interest = 0.3;
                 this.tx = null;
                 this.ty = null;
@@ -175,6 +226,7 @@
 
                 let dx = x2 - x;
                 let dy = y2 - y;
+
                 let l = Math.max(Math.abs(dx), Math.abs(dy));
                 dx /= l;
                 dy /= l;
@@ -183,8 +235,8 @@
                 let yy = y;
 
                 while (l > 0) {
-                    const ix = parseInt(xx + 0.5);
-                    const iy = parseInt(yy + 0.5);
+                    let ix = parseInt(xx + 0.5);
+                    let iy = parseInt(yy + 0.5);
 
                     if (x2 === ix && y2 === iy) break;
                     if (!(x === ix && y === iy) && map[ix][iy] === '#')
@@ -203,45 +255,43 @@
 
             damage(d, m) {
                 this.health -= d;
-                const {health, name, strength, x, y} = this;
-                if (health < 0) {
+                if (this.health < 0) {
                     // death
-                    const fl = name.charAt(0);
-                    player.setStatus(((fl === 'a') ? "An " : "A ") + this.name + " dies.", whiteColor);
-                    monsters.splice(monsters.indexOf(this, 1));
+                    let fl = this.name.charAt(0);
+                    player.setStatus(((fl === 'a' /*...*/) ? "An " : "A ") + this.name + " dies.", Color.white);
+                    monsters.splice(monsters.indexOf(this), 1);
 
                     // experience
-                    m.gainExperience(parseInt(Math.random() * strength));
+                    m.gainExperience(parseInt(Math.random() * this.strength));
                 }
                 // carnage
-                if (map[x][y] === floorchar) {
+                if (map[this.x][this.y] === floorchar) {
                     switch (parseInt(Math.random() * 3)) {
                         case 0:
-                            map[x][y] = ',';
+                            map[this.x][this.y] = ',';
                             break;
                         case 1:
-                            map[x][y] = '\'';
+                            map[this.x][this.y] = '\'';
                             break;
                         case 2:
-                            map[x][y] = '`';
+                            map[this.x][this.y] = '`';
                             break;
                     }
                 }
             }
 
             move(dx, dy) {
-                const {x, y, strength, experience} = this;
                 if (dx === 0 && dy === 0) return;
-                if (x + dx < 0 || x + dx >= width) return;
-                if (y + dy < 0 || y + dy >= height) return;
+                if (this.x + dx < 0 || this.x + dx >= width) return;
+                if (this.y + dy < 0 || this.y + dy >= height) return;
 
-                if (map[x + dx][y + dy] === '#') return;
+                if (map[this.x + dx][this.y + dy] === '#') return;
 
                 // if walk into a monster -- do damage
                 for (let i = 0; i < monsters.length; i++) {
-                    const m = monsters[i];
-                    if (m.x === x + dx && m.y === y + dy) {
-                        m.damage(parseInt(Math.random() * (strength + (experience / 20))), this);
+                    let m = monsters[i];
+                    if (m.x === this.x + dx && m.y === this.y + dy) {
+                        m.damage(parseInt(Math.random() * (this.strength + (this.experience / 20))), this);
                         return;
                     }
                 }
@@ -251,24 +301,22 @@
             }
 
             ai() {
-                const {memory, ai_interest} = this;
                 // if can see/remember player move towards them
-                const see = this.lineOfSight(player.x, player.y);
-                if ((see || memory) && Math.random() > ai_interest) {
+                let see = this.lineOfSight(player.x, player.y);
+                if ((see || this.memory) && Math.random() > this.ai_interest) {
                     if (see) {
                         this.memory = true;
                         this.tx = player.x;
                         this.ty = player.y;
                     }
-                    const {x, y, tx, ty} = this;
-                    const dx = tx - x;
-                    const dy = ty - y;
+                    let dx = this.tx - this.x;
+                    let dy = this.ty - this.y;
 
                     // attempts to move straight or diagonally
-                    let ddx = dx > 0 ? 1 : (dx < 0 ? -1 : 0);
-                    let ddy = dy > 0 ? 1 : (dy < 0 ? -1 : 0);
+                    let ddx = dx > 0 ? 1 : dx < 0 ? -1 : 0;
+                    let ddy = dy > 0 ? 1 : dy < 0 ? -1 : 0;
 
-                    const attempt = [[], [], []];
+                    let attempt = [[], [], []];
 
                     for (let c = 0; c < 3; c++) {
                         attempt[c][0] = ddx;
@@ -285,7 +333,7 @@
                     for (let c = 0; c < 3; c++) {
                         ddx = attempt[c][0];
                         ddy = attempt[c][1];
-                        if (map[x + ddx][y + ddy] !== '#') break;
+                        if (map[this.x + ddx][this.y + ddy] !== '#') break;
                     }
 
                     this.move(ddx, ddy);
@@ -297,14 +345,14 @@
         class Character extends Monster {
             constructor() {
                 super(20, 5, '@', "player");
-                this.seen = new Array(50).fill(undefined).map(col => new Array(50).fill(undefined));
-                this.sees = new Array(50).fill(undefined).map(col => new Array(50).fill(undefined));
+                this.seen = new Array(50).fill(undefined).map(() => new Array(50).fill(undefined));
+                this.sees = new Array(50).fill(undefined).map(() => new Array(50).fill(undefined));
                 this.score = 0;
                 this.rest = 0;
                 this.seeRadius = 7;
 
                 this.status = [" ", " ", " "];
-                this.statusColor = [whiteColor, whiteColor, whiteColor];
+                this.statusColor = [Color.white, Color.white, Color.white];
             }
 
             reset() {
@@ -326,30 +374,26 @@
             }
 
             see() {
-                const {seeRadius, y, x} = this;
                 for (let y = 0; y < height; y++) {
                     for (let x = 0; x < width; x++)
                         this.sees[x][y] = false;
                 }
 
-                for (let yy = -seeRadius; yy < seeRadius; yy++) {
-                    if (y + yy < 0 || y + yy >= height) continue;
-                    for (let xx = -seeRadius; xx < seeRadius; xx++) {
-                        if (xx * xx + yy * yy > seeRadius * seeRadius) continue;
-                        if (x + xx < 0 || x + xx >= width) continue;
-                        if (y + yy < 0 || y + yy >= height) continue;
-                        if (this.lineOfSight(x + xx, y + yy)) {
-                            this.sees[x + xx][y + yy] = true;
-                            this.seen[x + xx][y + yy] = true;
-                        }
+                for (let yy = -this.seeRadius; yy < this.seeRadius; yy++) {
+                    if (this.y + yy < 0 || this.y + yy >= height) continue;
+                    for (let xx = -this.seeRadius; xx < this.seeRadius; xx++) {
+                        if (xx * xx + yy * yy > this.seeRadius * this.seeRadius) continue;
+                        if (this.x + xx < 0 || this.x + xx >= width) continue;
+                        if (this.y + yy < 0 || this.y + yy >= height) continue;
+                        if (this.lineOfSight(this.x + xx, this.y + yy))
+                            this.sees[this.x + xx][this.y + yy] = this.seen[this.x + xx][this.y + yy] = true;
                     }
                 }
             }
 
             gainExperience(e) {
-                const {experience} = this;
-                if (experience / 20 < (experience + e) / 20) {
-                    this.setStatus("Gained a new level.", [255, 255, 0, 255]);
+                if (this.experience / 20 < (this.experience + e) / 20) {
+                    this.setStatus("Gained a new level.", Color.yellow);
                     this.maxhealth += 2;
                 }
                 this.experience += e;
@@ -357,24 +401,23 @@
 
             damage(d, m) {
                 super.damage(d, m);
-                this.setStatus("Hurt by an " + m.name + ".", whiteColor);
+                this.setStatus("Hurt by an " + m.name + ".", Color.white);
             }
 
             move(dx, dy) {
-                const {x, y} = this;
                 super.move(dx, dy);
 
-                if (map[x][y] === '$') {
-                    map[x][y] = floorchar;
-                    const dscore = parseInt(Math.random() * 20) + 2;
-                    this.setStatus("Got $" + dscore + ".", whiteColor);
+                if (map[this.x][this.y] === '$') {
+                    map[this.x][this.y] = floorchar;
+                    let dscore = parseInt(Math.random() * 20) + 2;
+                    this.setStatus("Got $" + dscore + ".", Color.white);
                     this.score += dscore;
                 }
-                if (map[x][y] === '!') {
-                    map[x][y] = floorchar;
+                if (map[this.x][this.y] === '!') {
+                    map[this.x][this.y] = floorchar;
                     this.health += parseInt(Math.random() * 5 + 5);
                     if (this.health > this.maxhealth) this.health = this.maxhealth;
-                    this.setStatus("Drank a healing potion.", whiteColor);
+                    this.setStatus("Drank a healing potion.", Color.white);
                 }
 
                 if (this.health < this.maxhealth)
@@ -392,7 +435,7 @@
                 monsters.push(player);
                 genMap();
                 this.reset();
-                this.setStatus("Went downstairs.", whiteColor);
+                this.setStatus("Went downstairs.", Color.white);
             }
 
             ai() {
@@ -406,7 +449,6 @@
                     this.y = parseInt(Math.random() * (height - 13)) + 2;
                     this.w = parseInt(Math.random() * 10) + 3;
                     this.h = parseInt(Math.random() * 10) + 3;
-
                     const {x, y, w, h} = this;
 
                     let clear = true;
@@ -431,11 +473,10 @@
             }
 
             createPathTo(b) {
-                const {w, h} = this;
-                let x = parseInt(Math.random() * (w)) + this.x;
-                let y = parseInt(Math.random() * (h)) + this.y;
-                const x2 = parseInt(Math.random() * (b.w)) + b.x;
-                const y2 = parseInt(Math.random() * (b.h)) + b.y;
+                let x = parseInt(Math.random() * (this.w)) + this.x;
+                let y = parseInt(Math.random() * (this.h)) + this.y;
+                let x2 = parseInt(Math.random() * (b.w)) + b.x;
+                let y2 = parseInt(Math.random() * (b.h)) + b.y;
 
                 let dx = x2 - x;
                 let dy = y2 - y;
@@ -458,29 +499,27 @@
             }
         }
 
-        const drawFont = 'normal normal 14px Monospaced';
+        let drawFont = 'normal normal 14pt Monospaced';
         let drawPanel;
-        const width = 50;
-        const height = 50;
-        const map = new Array(width).fill(undefined).map(() => new Array(height).fill(undefined));
-        const floorchar = '\u00B7';
-        const monsters = [];
+        let width = 50;
+        let height = 50;
+        let map = new Array(50).fill(undefined).map(() => new Array(50).fill(undefined));
+        let floorchar = '\u00B7';
+        let monsters = [];
         let player;
-        const whiteColor = [255, 255, 255, 255];
         let level = 0;
-        const mtypes = [
+        let mtypes = [
             new Monster(3, 2, 'a', "ant"),
             new Monster(5, 3, 'd', "dog"),
             new Monster(7, 4, 'k', "kobol"),
             new Monster(3, 6, 'g', "goblin"),
             new Monster(10, 3, 'h', "hobbit"),
             new Monster(7, 7, 'x', "xan"),
-            new Monster(15, 15, 'D', "dragon")
-        ];
+            new Monster(15, 15, 'D', "dragon")];
 
         function tick() {
             for (let i = 0; i < monsters.length; i++) {
-                const m = monsters[i];
+                let m = monsters[i];
                 m.ai();
             }
         }
@@ -491,38 +530,38 @@
                     map[x][y] = '#';
             }
 
-            const connectedRooms = [];
-            const rooms = [];
+            let connectedRooms = [];
+            let rooms = [];
 
-            const nrooms = parseInt(Math.random() * 4) + 5;
+            let nrooms = parseInt(Math.random() * 4) + 5;
             for (let i = 0; i < nrooms; i++) {
                 rooms.push(new Room());
             }
             connectedRooms.push(new Room());
             while (rooms.length > 0) {
-                const a = parseInt(Math.random() * connectedRooms.length);
-                const b = parseInt(Math.random() * rooms.length);
-                connectedRooms[a].createPathTo(rooms[b]);
-                connectedRooms.push(rooms[b]);
-                rooms.splice(b, 1);
+                let a, b;
+                a = connectedRooms[parseInt(Math.random() * connectedRooms.length)];
+                b = rooms.pop();
+                a.createPathTo(b);
+                connectedRooms.push(b);
             }
 
             // gold
             for (let i = 0; i < (level + 10); i++) {
-                const x = parseInt(Math.random() * width);
-                const y = parseInt(Math.random() * height);
+                let x = parseInt(Math.random() * width);
+                let y = parseInt(Math.random() * height);
                 map[x][y] = '$';
             }
             // potions
             for (let i = 0; i < 10; i++) {
-                const x = parseInt(Math.random() * width);
-                const y = parseInt(Math.random() * height);
+                let x = parseInt(Math.random() * width);
+                let y = parseInt(Math.random() * height);
                 map[x][y] = '!';
             }
             // down staircase
             while (true) {
-                const x = parseInt(Math.random() * width);
-                const y = parseInt(Math.random() * height);
+                let x = parseInt(Math.random() * width);
+                let y = parseInt(Math.random() * height);
                 if (map[x][y] === floorchar) {
                     map[x][y] = '>';
                     break;
@@ -530,7 +569,7 @@
             }
 
             // monsters
-            const c = nrooms + parseInt(Math.random() * (nrooms + (level / 4)));
+            let c = nrooms + parseInt(Math.random() * (nrooms + parseFloat(level / 4)));
             for (let i = 0; i < c; i++) {
                 let ind = parseInt(Math.abs((Math.random() + Math.random() - 1)) * (level + 2));
                 if (ind >= mtypes.length) ind = mtypes.length - 1;
@@ -545,7 +584,7 @@
 
         function init() {
             drawPanel = new DrawPanel();
-            drawPanel.setPreferredSize(300, 300);
+            drawPanel.setPreferredSize(600, 600);
 
             genMap();
 
@@ -559,7 +598,7 @@
         init();
     }
 
-    console.log(new RogueApp());
+    console.log(new RogueApplet());
 </script>
 </body>
 </html>
