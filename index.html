@@ -13,245 +13,383 @@
 </head>
 <body>
 <script>
-    Math.clamp = function (n, max = 1, min = -1) {
-        return Math.max(min, Math.min(max, n));
-    };
+    function Game() {
+        Math.clamp = function (n, max = 1, min = -1) {
+            return Math.max(min, Math.min(max, n));
+        };
 
-    Math.randInt = function (max, min = 0) {
-        return Math.floor(Math.random() * (max - min)) + min;
-    };
+        Math.randInt = function (max, min = 0) {
+            return Math.floor(Math.random() * (max - min)) + min;
+        };
 
-    Array.prototype.random = function () {
-        return this[Math.randInt(this.length)];
-    };
+        Array.prototype.random = function () {
+            return this[Math.randInt(this.length)];
+        };
 
-    class Color {
-        constructor(red, green, blue, alpha = 1) {
-            this.colors = [red, green, blue];
-            this.alpha = alpha;
+        class Color {
+            constructor(red, green, blue, alpha = 1) {
+                this.colors = [red, green, blue];
+                this.alpha = alpha;
+            }
+
+            setAlpha(alpha) {
+                this.alpha = Math.clamp(alpha, 1, 0);
+                return this;
+            }
+
+            toString() {
+                return `rgba(${this.colors.map(v => parseInt(v * 255)).concat([this.alpha])})`;
+            }
         }
 
-        setAlpha(alpha) {
-            this.alpha = Math.clamp(alpha, 1, 0);
-            return this;
-        }
+        Color.black = new Color(0, 0, 0);
+        Color.white = new Color(1, 1, 1);
+        Color.yellow = new Color(1, 1, 0);
+        Color.red = new Color(1, 0, 0);
+        Color.green = new Color(0, 1, 0);
+        Color.blue = new Color(0, 0, 1);
 
-        toString() {
-            return `rgba(${this.colors.map(v => parseInt(v * 255)).concat([this.alpha])})`;
-        }
-    }
+        class Canvas {
+            constructor(fontSize = 14, container = document.body, devMode = true) {
+                this.map = [];
+                this.canvas = document.createElement('canvas');
+                this.ctx = this.canvas.getContext('2d');
+                this.cellSize = Math.max(fontSize, this.ctx.measureText('_').width);
 
-    Color.black = new Color(0, 0, 0);
-    Color.white = new Color(1, 1, 1);
-    Color.yellow = new Color(1, 1, 0);
-    Color.red = new Color(1, 0, 0);
-    Color.green = new Color(0, 1, 0);
-    Color.blue = new Color(0, 0, 1);
+                if (devMode) {
+                    const tooltip = document.createElement('pre');
+                    Object.assign(tooltip.style, {
+                        position: 'absolute',
+                        padding: '3px',
+                        'background-color': Color.white,
+                        'pointer-events': 'none',
+                    });
+                    this.canvas.addEventListener('mousemove', this._mouseMove.bind(this, tooltip));
+                    container.appendChild(tooltip);
+                }
 
-    class Character {
-        constructor(char, fg = Color.white) {
-            this.char = char;
-            this.fg = fg;
-        }
+                window.addEventListener('resize', this._resize.bind(this));
+                window.requestAnimationFrame(this._paint.bind(this));
+                this._resize();
+                container.appendChild(this.canvas);
+            }
 
-        toString() {
-            return this.char;
-        }
-    }
-
-    class Canvas {
-        constructor(width = 50, height = 50, fontSize = 14, container = document.body, devMode = false) {
-            this.map = [];
-            this.canvas = document.createElement('canvas');
-            this.ctx = this.canvas.getContext('2d');
-            this.cellSize = Math.max(fontSize, this.ctx.measureText('_').width);
-            Object.assign(this.canvas, {
-                width: width * this.cellSize,
-                height: height * this.cellSize
-            });
-
-            if (devMode) {
-                const tooltip = document.createElement('pre');
-                Object.assign(tooltip.style, {
-                    position: 'absolute',
-                    padding: '3px',
-                    'background-color': Color.white,
-                    'pointer-events': 'none',
+            setCharacterMap(map) {
+                this.map = map;
+                Object.assign(this.canvas, {
+                    width: map.length * this.cellSize,
+                    height: map[0].length * this.cellSize
                 });
-                this.canvas.addEventListener('mousemove', this._mouseMove.bind(this, tooltip));
-                container.appendChild(tooltip);
+
+                return this;
             }
 
-            window.addEventListener('resize', this._resize.bind(this));
-            window.requestAnimationFrame(this._paint.bind(this));
-            this._resize();
-            container.appendChild(this.canvas);
+            _mouseMove(tooltip, {clientX, clientY}) {
+                const styleWidth = parseFloat(this.canvas.style.width);
+                const styleHeight = parseFloat(this.canvas.style.height);
+                const widthRatio = this.canvas.width / styleWidth;
+                const heightRatio = this.canvas.height / styleHeight;
+                const x = Math.floor(clientX * widthRatio / this.cellSize);
+                const y = Math.floor(clientY * heightRatio / this.cellSize);
+                tooltip.innerText = [x, y].join(',');
+                const computedStyles = window.getComputedStyle(tooltip);
+                const xOffset = clientX > styleWidth / 2 ? parseFloat(computedStyles.width) : 0;
+                const yOffset = clientY > styleHeight / 2 ? parseFloat(computedStyles.height) : 0;
+                Object.assign(tooltip.style, {
+                    display: 'block',
+                    left: `${clientX - xOffset}px`,
+                    top: `${clientY - yOffset * 2}px`,
+                });
+            }
+
+            _resize() {
+                const {clientWidth, clientHeight} = document.documentElement;
+                const size = Math.min(clientWidth, clientHeight);
+                Object.assign(this.canvas.style, {
+                    width: `${size}px`,
+                    height: `${size}px`,
+                });
+            }
+
+            _paint() {
+                this._clear();
+                this.ctx.fillStyle = Color.white;
+                this.map.forEach((col, y) => col.forEach((txt, x) => {
+                    this._paintCharacter(txt, x, y);
+                }));
+                window.requestAnimationFrame(this._paint.bind(this));
+            }
+
+            _clear() {
+                const {width, height} = this.canvas;
+                const bounds = [0, 0, width, height];
+                this.ctx.clearRect(...bounds);
+                this.ctx.fillStyle = Color.black;
+                this.ctx.fillRect(...bounds);
+            }
+
+            _paintCharacter(char, x, y) {
+                this.ctx.font = `normal normal ${this.cellSize}px Monospaced`;
+                this.ctx.textBaseline = 'top';
+                this.ctx.fillStyle = char instanceof Character ? char.fg : Color.white;
+                `${char}`.split('').forEach((c, i) => this.ctx.fillText(c, (x + i) * this.cellSize, y * this.cellSize));
+            }
         }
 
-        setCharacterMap(map) {
-            this.map = map;
+        class Character {
+            constructor(char, fg = Color.white) {
+                this.char = char;
+                this.fg = fg;
+            }
 
-            return this;
+            toString() {
+                return this.char;
+            }
         }
 
-        _mouseMove(tooltip, {clientX, clientY}) {
-            const styleWidth = parseFloat(this.canvas.style.width);
-            const styleHeight = parseFloat(this.canvas.style.height);
-            const widthRatio = this.canvas.width / styleWidth;
-            const heightRatio = this.canvas.height / styleHeight;
-            const x = Math.floor(clientX * widthRatio / this.cellSize);
-            const y = Math.floor(clientY * heightRatio / this.cellSize);
-            tooltip.innerText = [x, y].join(',');
-            const computedStyles = window.getComputedStyle(tooltip);
-            const xOffset = clientX > styleWidth / 2 ? parseFloat(computedStyles.width) : 0;
-            const yOffset = clientY > styleHeight / 2 ? parseFloat(computedStyles.height) : 0;
-            Object.assign(tooltip.style, {
-                display: 'block',
-                left: `${clientX - xOffset}px`,
-                top: `${clientY - yOffset * 2}px`,
-            });
+        class Wall extends Character {
+            constructor() {
+                super('#');
+            }
         }
 
-        _resize() {
-            const {clientWidth, clientHeight} = document.documentElement;
-            const size = Math.min(clientWidth, clientHeight);
-            Object.assign(this.canvas.style, {
-                width: `${size}px`,
-                height: `${size}px`,
-            });
+        class Floor extends Character {
+            constructor() {
+                super('.');
+            }
         }
 
-        _paint() {
-            this._clear();
-            this.ctx.fillStyle = Color.white;
-            this.map.forEach((col, y) => col.forEach((txt, x) => {
-                this._paintCharacter(txt, x, y);
-            }));
-            window.requestAnimationFrame(this._paint.bind(this));
+        class Gold extends Character {
+            constructor() {
+                super('$', Color.yellow);
+            }
         }
 
-        _clear() {
-            const {width, height} = this.canvas;
-            const bounds = [0, 0, width, height];
-            this.ctx.clearRect(...bounds);
-            this.ctx.fillStyle = Color.black;
-            this.ctx.fillRect(...bounds);
+        class Potion extends Character {
+            constructor() {
+                super('!', Color.green);
+            }
         }
 
-        _paintCharacter(char, x, y) {
-            this.ctx.font = `normal normal ${this.cellSize}px Monospaced`;
-            this.ctx.textBaseline = 'top';
-            this.ctx.fillStyle = char instanceof Character ? char.fg : Color.white;
-            `${char}`.split('').forEach((c, i) => this.ctx.fillText(c, (x + i) * this.cellSize, y * this.cellSize));
-        }
-    }
-
-    class Wall extends Character {
-        constructor() {
-            super('#');
-        }
-    }
-
-    class Floor extends Character {
-        constructor() {
-            super(' ');
-        }
-    }
-
-    class Gold extends Character {
-        constructor() {
-            super('$', Color.yellow);
-        }
-    }
-
-    class Potion extends Character {
-        constructor() {
-            super('!', Color.green);
-        }
-    }
-
-    class Exit extends Character {
-        constructor() {
-            super('>');
-        }
-    }
-
-    class Map {
-        constructor(tiles) {
-            this.tiles = tiles;
-            this.width = this.tiles[0].length;
-            this.height = this.tiles.length;
+        class Exit extends Character {
+            constructor() {
+                super('>');
+            }
         }
 
-        toArray() {
-            return this.tiles;
+        class Monster extends Character {
+            constructor(char, fg) {
+                super(char, fg);
+                this.x = -1;
+                this.y = -1;
+                this.sightRadius = 7;
+            }
+
+            setPosition(x, y) {
+                this.x = x;
+                this.y = y;
+                return this;
+            }
+
+            move(dx, dy) {
+                const tx = this.x + dx;
+                const ty = this.y + dy;
+                if (!(map.get(tx, ty) instanceof Wall)) {
+                    this.x = tx;
+                    this.y = ty;
+                }
+
+                return this;
+            }
         }
 
-        static generate(width = 25, height = 25, level = 0) {
-            const sizeRatio = (width / 25 + height / 25) / 2;
-            const wall = new Wall();
-            const gold = new Gold();
-            const potion = new Potion();
-            const exit = new Exit();
+        class Player extends Monster {
+            constructor() {
+                super('@', Color.blue);
+            }
 
-            const floor = new Floor();
-            const tiles = new Array(height).fill(undefined).map(() => new Array(width).fill(wall));
-            const rooms = new Array(Math.randInt(sizeRatio * 5 + 3, 3))
-                .fill(undefined)
-                .map(() => {
-                    let hardStop = 1000;
-                    while (--hardStop > 0) {
-                        const w = Math.randInt(sizeRatio * 10 + 3, 3);
-                        const h = Math.randInt(sizeRatio * 10 + 3, 3);
-                        const x = Math.randInt(width - w - 2, 1);
-                        const y = Math.randInt(height - h - 2, 1);
-                        const diggable = tiles.slice(y - 1, y + h + 1).reduce((clear, col) => {
-                            return col.slice(x - 1, x + w + 1).reduce((clear, cell) => {
-                                return clear && cell instanceof Wall;
-                            }, clear);
-                        }, true);
+            move(dx, dy) {
+                super.move(dx, dy);
+                const {x, y} = this;
+                const target = map.get(x, y);
+                switch (true) {
+                    case target instanceof Potion:
+                        alert('Got Potion!');
+                        map.clear(x, y);
+                        break;
+                    case target instanceof Gold:
+                        alert('Got Gold!');
+                        map.clear(x, y);
+                        break;
+                }
+            }
+        }
 
-                        if (diggable) {
-                            return new Array(h).fill(undefined).reduce((room, _, j) => {
-                                return new Array(w).fill(undefined).reduce((room, _, i) => {
-                                    tiles[y + j][x + i] = floor;
-                                    return room.concat([[x + i, y + j]]);
-                                }, room);
-                            }, []);
-                        }
+        class Map {
+            constructor(tiles, rooms) {
+                this.monsters = [];
+                this.tiles = tiles;
+                this.rooms = rooms;
+                this.width = this.tiles[0].length;
+                this.height = this.tiles.length;
+            }
+
+            toArray() {
+                const {x, y, sightRadius} = player;
+                const x1 = x - sightRadius;
+                const y1 = y - sightRadius;
+                const x2 = x + sightRadius;
+                const y2 = y + sightRadius;
+                const xLeft = x1 < 0 ? -1 * x1 : 0;
+                const yTop = y1 < 0 ? -1 * y1 : 0;
+                const xRight = x2 > this.width ? x2 - this.width : 0;
+                const yBottom = y2 > this.height ? y2 - this.height : 0;
+                const xAdjust = xLeft - xRight;
+                const yAdjust = yTop - yBottom;
+
+                return this.tiles.slice(y1 + yAdjust, y2 + yAdjust).map((col, j) => {
+                    return col.slice(x1 + xAdjust, x2 + xAdjust).map((c, i) => {
+                        return this.monsters.reduce((c, m) => {
+                            if (m.x === i + x1 + xAdjust && m.y === j + y1 + yAdjust) {
+                                return m;
+                            }
+                            return c;
+                        }, c);
+                    });
+                });
+            }
+
+            spawn(monster) {
+                let hardStop = 100;
+                while (--hardStop >= 0) {
+                    const [x, y] = this.rooms.random().random();
+                    if (this.tiles[y][x] instanceof Floor) {
+                        this.monsters.push(monster);
+                        return monster.setPosition(x, y);
                     }
-                })
-                .filter(Boolean);
-
-            rooms.map(function (room, i, rooms) {
-                let [x1, y1] = room.random();
-                let [x2, y2] = rooms[(i + 1) % rooms.length].random();
-                while (x1 !== x2 || y1 !== y2) {
-                    tiles[y1][x1] = floor;
-                    Math.random() < 0.5
-                        ? x1 += (Math.clamp(x1 - x2) * -1)
-                        : y1 += (Math.clamp(y1 - y2) * -1);
                 }
-            });
-
-            function placeItems(num, item) {
-                while (--num >= 0) {
-                    const [x, y] = rooms.random().random();
-                    tiles[y][x] = item;
-                }
+                throw new Error(`Could not spawn monster ${monster.constructor.name}`);
             }
 
-            placeItems(3 + Math.randInt(sizeRatio * level), gold);
-            placeItems(3 + Math.randInt(sizeRatio * level), potion);
-            placeItems(1, exit);
+            clear(x, y) {
+                this.tiles[y][x] = new Floor();
+                return this;
+            }
 
-            return new Map(tiles);
+            get(x, y) {
+                return this.tiles[y][x];
+            }
+
+            static generate(width = 25, height = 25, level = 0) {
+                const sizeRatio = (width / 25 + height / 25) / 2;
+                const wall = new Wall();
+                const gold = new Gold();
+                const potion = new Potion();
+                const exit = new Exit();
+
+                const floor = new Floor();
+                const tiles = new Array(height).fill(undefined).map(() => {
+                    return new Array(width).fill(wall);
+                });
+                const rooms = new Array(Math.randInt(sizeRatio * 5 + 3, parseInt(sizeRatio * 3)))
+                    .fill(undefined)
+                    .map(() => {
+                        let hardStop = 1000;
+                        while (--hardStop > 0) {
+                            const w = Math.randInt(sizeRatio * 10 + 2, 1);
+                            const h = Math.randInt(sizeRatio * 10 + 2, 1);
+                            const x = Math.randInt(width - w - 2, 1);
+                            const y = Math.randInt(height - h - 2, 1);
+                            const diggable = tiles.slice(y - 1, y + h + 1).reduce((clear, col) => {
+                                return col.slice(x - 1, x + w + 1).reduce((clear, cell) => {
+                                    return clear && cell instanceof Wall;
+                                }, clear);
+                            }, true);
+
+                            if (diggable) {
+                                return new Array(h).fill(undefined).reduce((room, _, j) => {
+                                    return new Array(w).fill(undefined).reduce((room, _, i) => {
+                                        tiles[y + j][x + i] = floor;
+                                        return room.concat([[x + i, y + j]]);
+                                    }, room);
+                                }, []);
+                            }
+                        }
+                    })
+                    .filter(Boolean);
+
+                rooms.map(function (room, i, rooms) {
+                    let [x1, y1] = room.random();
+                    let [x2, y2] = rooms[(i + 1) % rooms.length].random();
+                    while (x1 !== x2 || y1 !== y2) {
+                        tiles[y1][x1] = floor;
+                        Math.random() < 0.5
+                            ? x1 += (Math.clamp(x1 - x2) * -1)
+                            : y1 += (Math.clamp(y1 - y2) * -1);
+                    }
+                });
+
+                function placeItems(num, item) {
+                    while (--num >= 0) {
+                        const [x, y] = rooms.random().random();
+                        tiles[y][x] = item;
+                    }
+                }
+
+                placeItems(3 + Math.randInt(sizeRatio * level), gold);
+                placeItems(3 + Math.randInt(sizeRatio * level), potion);
+                placeItems(1, exit);
+
+                return new Map(tiles, rooms);
+            }
         }
+
+        let level = 0;
+        let map = Map.generate(15, 15, level);
+        const player = map.spawn(new Player());
+
+        const canvas = new Canvas().setCharacterMap(map.toArray());
+
+        window.addEventListener('keypress', ({key}) => {
+            switch (key) {
+                case 'w':
+                    player.move(0, -1);
+                    break;
+                case 'd':
+                    player.move(1, 0);
+                    break;
+                case 's':
+                    player.move(0, 1);
+                    break;
+                case 'a':
+                    player.move(-1, 0);
+                    break;
+                case 'e':
+                    player.move(1, -1);
+                    break;
+                case 'c':
+                    player.move(1, 1);
+                    break;
+                case 'z':
+                    player.move(-1, 1);
+                    break;
+                case 'q':
+                    player.move(-1, -1);
+                    break;
+                case 'x':
+                    if (map.get(player.x, player.y) instanceof Exit) {
+                        map = Map.generate(map.width + level, map.height + level, ++level);
+                        map.spawn(player);
+                    } else {
+                        player.move(0, 0);
+                    }
+                    break;
+            }
+            canvas.setCharacterMap(map.toArray());
+        });
     }
 
-    const map = Map.generate(50, 50, 5);
-
-    const canvas = new Canvas(map.width, map.height).setCharacterMap(map.toArray());
+    console.log(new Game());
 </script>
 </body>
 </html>
