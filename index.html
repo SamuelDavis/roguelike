@@ -8,14 +8,21 @@
     <style>
         body {
             margin: 0;
-            background-color: blue;
         }
     </style>
 </head>
 <body>
 <script>
-    Math.clamp = function (n, max, min) {
+    Math.clamp = function (n, max = 1, min = -1) {
         return Math.max(min, Math.min(max, n));
+    };
+
+    Math.randInt = function (max, min = 0) {
+        return Math.floor(Math.random() * (max - min)) + min;
+    };
+
+    Array.prototype.random = function () {
+        return this[Math.randInt(this.length)];
     };
 
     class Color {
@@ -53,7 +60,7 @@
     }
 
     class Canvas {
-        constructor(width = 50, height = 50, fontSize = 14, container = document.body, devMode = true) {
+        constructor(width = 50, height = 50, fontSize = 14, container = document.body, devMode = false) {
             this.map = [];
             this.canvas = document.createElement('canvas');
             this.ctx = this.canvas.getContext('2d');
@@ -139,11 +146,112 @@
         }
     }
 
-    const canvas = new Canvas().setCharacterMap([
-        [new Character('foobar', Color.blue)],
-        ['!'].concat('Hello'.split('').map(c => new Character(c, Color.red))).concat(['!']),
-        ['!'].concat('World'.split('').map(c => new Character(c, Color.green))).concat(['!']),
-    ]);
+    class Wall extends Character {
+        constructor() {
+            super('#');
+        }
+    }
+
+    class Floor extends Character {
+        constructor() {
+            super(' ');
+        }
+    }
+
+    class Gold extends Character {
+        constructor() {
+            super('$', Color.yellow);
+        }
+    }
+
+    class Potion extends Character {
+        constructor() {
+            super('!', Color.green);
+        }
+    }
+
+    class Exit extends Character {
+        constructor() {
+            super('>');
+        }
+    }
+
+    class Map {
+        constructor(tiles) {
+            this.tiles = tiles;
+            this.width = this.tiles[0].length;
+            this.height = this.tiles.length;
+        }
+
+        toArray() {
+            return this.tiles;
+        }
+
+        static generate(width = 25, height = 25, level = 0) {
+            const sizeRatio = (width / 25 + height / 25) / 2;
+            const wall = new Wall();
+            const gold = new Gold();
+            const potion = new Potion();
+            const exit = new Exit();
+
+            const floor = new Floor();
+            const tiles = new Array(height).fill(undefined).map(() => new Array(width).fill(wall));
+            const rooms = new Array(Math.randInt(sizeRatio * 5 + 3, 3))
+                .fill(undefined)
+                .map(() => {
+                    let hardStop = 1000;
+                    while (--hardStop > 0) {
+                        const w = Math.randInt(sizeRatio * 10 + 3, 3);
+                        const h = Math.randInt(sizeRatio * 10 + 3, 3);
+                        const x = Math.randInt(width - w - 2, 1);
+                        const y = Math.randInt(height - h - 2, 1);
+                        const diggable = tiles.slice(y - 1, y + h + 1).reduce((clear, col) => {
+                            return col.slice(x - 1, x + w + 1).reduce((clear, cell) => {
+                                return clear && cell instanceof Wall;
+                            }, clear);
+                        }, true);
+
+                        if (diggable) {
+                            return new Array(h).fill(undefined).reduce((room, _, j) => {
+                                return new Array(w).fill(undefined).reduce((room, _, i) => {
+                                    tiles[y + j][x + i] = floor;
+                                    return room.concat([[x + i, y + j]]);
+                                }, room);
+                            }, []);
+                        }
+                    }
+                })
+                .filter(Boolean);
+
+            rooms.map(function (room, i, rooms) {
+                let [x1, y1] = room.random();
+                let [x2, y2] = rooms[(i + 1) % rooms.length].random();
+                while (x1 !== x2 || y1 !== y2) {
+                    tiles[y1][x1] = floor;
+                    Math.random() < 0.5
+                        ? x1 += (Math.clamp(x1 - x2) * -1)
+                        : y1 += (Math.clamp(y1 - y2) * -1);
+                }
+            });
+
+            function placeItems(num, item) {
+                while (--num >= 0) {
+                    const [x, y] = rooms.random().random();
+                    tiles[y][x] = item;
+                }
+            }
+
+            placeItems(3 + Math.randInt(sizeRatio * level), gold);
+            placeItems(3 + Math.randInt(sizeRatio * level), potion);
+            placeItems(1, exit);
+
+            return new Map(tiles);
+        }
+    }
+
+    const map = Map.generate(50, 50, 5);
+
+    const canvas = new Canvas(map.width, map.height).setCharacterMap(map.toArray());
 </script>
 </body>
 </html>
