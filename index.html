@@ -8,459 +8,142 @@
     <style>
         body {
             margin: 0;
-            background-color: rgb(255, 255, 255);
-        }
-
-        #cursor {
-            background-color: rgba(173, 255, 47, 0.25);
-            border: 1px solid rgb(173, 255, 47);
-            position: absolute;
-            pointer-events: none;
-            display: none;
-        }
-
-        #tooltip {
-            background-color: rgb(0, 0, 0);
-            border: 1px solid rgb(255, 215, 0);
-            position: absolute;
-            padding: 3px;
-            color: rgb(255, 255, 255);
-            display: none;
+            background-color: blue;
         }
     </style>
 </head>
 <body>
-<pre id="tooltip"></pre>
-<div id="cursor">&nbsp;</div>
-<canvas id="canvas"></canvas>
 <script>
-        Math.randInt = function (max, min = 0) {
-            return parseInt(Math.floor(Math.random() * (max - min)) + min);
-        };
+    Math.clamp = function (n, max, min) {
+        return Math.max(min, Math.min(max, n));
+    };
 
-        Math.randBool = function (weight = 0.5) {
-            return Math.random() < weight;
-        };
-
-        Math.clamp = function (n, max, min) {
-            return Math.max(min, Math.min(max, n));
-        };
-
-        Array.prototype.random = function () {
-            if (!this.length) return null;
-            return this[Math.randInt(this.length)]
-        };
-
-        function Game() {
-            class Tile {
-                constructor(s) {
-                    this.s = s;
-                }
-
-                toString() {
-                    return this.s;
-                }
-            }
-
-            class Wall extends Tile {
-                constructor() {
-                    super('\u2317');
-                }
-            }
-
-            class Floor extends Tile {
-                constructor() {
-                    super('\u00B7');
-                }
-            }
-
-            class Monster extends Tile {
-                constructor(s, value) {
-                    super(s);
-                    this.seeRadius = 7;
-                    this.sizeMod = 0.8;
-                    this.maxHp = value;
-                    this.hp = value;
-                    this.str = value;
-                    this.x = 0;
-                    this.y = 0;
-                }
-
-                ai() {
-                    const bounds = [this.x - 1, this.y - 1, this.x + 2, this.y + 2];
-                    const floor = map.reduce((_, x, y) => [x, y], bounds, Floor);
-                    const [x, y] = floor.random();
-                    this.move(
-                        Math.clamp(this.x - x, 1, -1) * -1,
-                        Math.clamp(this.y - y, 1, -1) * -1
-                    );
-                }
-
-                move(dx, dy) {
-                    const {x, y} = this;
-                    const tx = x + dx;
-                    const ty = y + dy;
-
-                    if (map.tiles[tx][ty] instanceof Floor) {
-                        for (let i = 0; i < map.monsters.length; i++) {
-                            const other = map.monsters[i];
-                            if (other.x === tx && other.y === ty) {
-                                if (other instanceof Player || this instanceof Player) {
-                                    this.damage(other);
-                                }
-                                return;
-                            }
-                        }
-                        this.x = tx;
-                        this.y = ty;
-                    }
-                }
-
-                damage(target) {
-                    target.hp -= Math.randInt(this.str, this.str * 0.75) + 1;
-                    if (target.hp < 0) {
-                        alert(`${target.constructor.name} killed!`);
-                        map.monsters.splice(map.monsters.indexOf(target), 1);
-                    }
-                }
-            }
-
-            class Pawn extends Monster {
-                constructor() {
-                    super('\u265F', 1);
-                }
-            }
-
-            class Knight extends Monster {
-                constructor() {
-                    super('\u265E', 3);
-                }
-            }
-
-            class Bishop extends Monster {
-                constructor() {
-                    super('\u265D', 3);
-                }
-            }
-
-            class Rook extends Monster {
-                constructor() {
-                    super('\u265C', 5);
-                }
-            }
-
-            class Queen extends Monster {
-                constructor() {
-                    super('\u265B', 9);
-                }
-            }
-
-            class King extends Monster {
-                constructor() {
-                    super('\u265A', 11);
-                }
-            }
-
-            class Player extends Knight {
-                constructor() {
-                    super('@', 2);
-                }
-
-                ai() {
-                }
-            }
-
-            Monster.types = [
-                Pawn,
-                Knight,
-                Bishop,
-                Rook,
-                Queen,
-                King
-            ];
-
-            class Color {
-                constructor(red, green, blue, alpha = 1) {
-                    this.colors = [red, green, blue];
-                    this.alpha = alpha;
-                }
-
-                setAlpha(alpha) {
-                    this.alpha = Math.clamp(alpha, 1, 0);
-                    return this;
-                }
-
-                toString() {
-                    return `rgba(${this.colors.map(v => parseInt(v * 255)).concat([this.alpha])})`;
-                }
-            }
-
-            Color.black = new Color(0, 0, 0);
-            Color.white = new Color(1, 1, 1);
-            Color.yellow = new Color(1, 1, 0);
-            Color.red = new Color(0.54, 0, 0);
-            Color.blue = new Color(0.3, 0.3, 1);
-
-            class Room {
-                constructor() {
-                    let hardStop = 1000;
-                    while (--hardStop > 0) {
-                        const width = Math.randInt(Math.max(5, map.length / 250), 3);
-                        const height = Math.randInt(Math.max(5, map.length / 250), 3);
-                        this.x1 = Math.randInt(map.width - width - 1, 1);
-                        this.y1 = Math.randInt(map.height - height - 1, 1);
-                        this.x2 = this.x1 + width;
-                        this.y2 = this.y1 + height;
-
-                        const boundsWithWalls = [
-                            this.x1 - 1, this.y1 - 1,
-                            this.x2 + 1, this.y2 + 1
-                        ];
-
-                        const walls = map.reduce(() => undefined, boundsWithWalls, Wall);
-                        if (walls.length === (width + 2) * (height + 2)) {
-                            map.dig(...this.toBounds());
-                            return this;
-                        }
-                    }
-                    throw new Error(`Could not place: ${this}`);
-                }
-
-                digTo(that) {
-                    const fromSpace = map.reduce((_, x, y) => [x, y], this.toBounds());
-                    const toSpace = map.reduce((_, x, y) => [x, y], that.toBounds());
-                    let [x1, y1] = fromSpace.random();
-                    const [x2, y2] = toSpace.random();
-                    const dx = Math.clamp(x1 - x2, 1, -1) * -1;
-                    const dy = Math.clamp(y1 - y2, 1, -1) * -1;
-
-                    while (x1 !== x2 || y1 !== y2) {
-                        if (x1 === x2) {
-                            y1 += dy;
-                        } else if (y1 === y2) {
-                            x1 += dx;
-                        } else if (Math.randBool()) {
-                            y1 += dy;
-                        } else {
-                            x1 += dx;
-                        }
-                        map.dig(x1, y1, x1 + 1, y1 + 1);
-                    }
-                }
-
-                toBounds() {
-                    return [this.x1, this.y1, this.x2, this.y2];
-                }
-
-                toString() {
-                    return `Room: ${this.toBounds().join(', ')}`;
-                }
-            }
-
-            class Map {
-                constructor(width, height, difficulty = 0) {
-                    this.difficulty = difficulty;
-                    this.width = width;
-                    this.height = height;
-                    this.length = this.width * this.height;
-                    this.monsters = [];
-                    this.player = new Player();
-                }
-
-                place(monster) {
-                    const [x, y] = this.reduce((_, x, y) => [x, y], undefined, Floor).random();
-                    monster.x = x;
-                    monster.y = y;
-                }
-
-                generate() {
-                    this.difficulty++;
-                    const wall = new Wall();
-                    this.tiles = new Array(this.width).fill(undefined).map(() => new Array(this.height).fill(wall));
-                    const unconnectedRooms = new Array(Math.max(5, Math.randInt(this.length / 250, this.length / 500)))
-                        .fill(undefined).map(() => new Room(this));
-                    const connectedRooms = [unconnectedRooms.pop()];
-
-                    while (unconnectedRooms.length) {
-                        const unconnected = unconnectedRooms.pop();
-                        const connected = connectedRooms.random();
-
-                        connected.digTo(unconnected);
-                        connectedRooms.push(unconnected);
-                    }
-
-                    this.monsters = new Array(Math.randInt(this.difficulty * 2, this.difficulty))
-                        .fill(undefined)
-                        .map(() => {
-                            const type = Monster.types
-                                .slice(0, Math.min(Monster.types.length, Math.randInt(this.difficulty)) + 1)
-                                .random();
-                            const monster = new type();
-                            this.place(monster);
-                            return monster;
-                        });
-
-                    this.place(this.player);
-                    this.monsters.push(this.player);
-
-                    return this;
-                }
-
-                dig(x1, y1, x2, y2, tile = new Floor()) {
-                    this.reduce((_, x, y) => this.tiles[x][y] = tile, [x1, y1, x2, y2], Wall);
-                }
-
-                reduce(cb, bounds = [0, 0, this.tiles.length, this.tiles[0].length], type = null) {
-                    return this.tiles.slice(bounds[0], bounds[2]).reduce((acc, row, x) => {
-                        return row.slice(bounds[1], bounds[3]).reduce((acc, tile, y) => {
-                            if (!type || tile instanceof type) {
-                                const res = cb(tile, x + bounds[0], y + bounds[1]);
-                                if (res !== null) {
-                                    return acc.concat([res]);
-                                }
-                            }
-                            return acc;
-                        }, acc);
-                    }, []);
-                }
-            }
-
-            class UI {
-                constructor(canvas) {
-                    this.tileSize = 32;
-                    this.canvas = canvas;
-                    this.ctx = canvas.getContext('2d');
-                    canvas.width = map.width * this.tileSize;
-                    canvas.height = map.height * this.tileSize;
-                    this.resize();
-                    window.addEventListener('resize', this.resize.bind(this));
-                    window.requestAnimationFrame(this.render.bind(this));
-                    window.addEventListener('keypress', this.keypress.bind(this));
-
-                    if (window.location.hash === '#dev') {
-                        this.loadDev();
-                    }
-                }
-
-                keypress({key}) {
-                    switch (key) {
-                        case 'w':
-                            map.player.move(0, -1);
-                            break;
-                        case 'd':
-                            map.player.move(1, 0);
-                            break;
-                        case 's':
-                            map.player.move(0, 1);
-                            break;
-                        case 'a':
-                            map.player.move(-1, 0);
-                            break;
-                        case 'f':
-                            map.player.move(0, 0);
-                            break;
-                    }
-                    map.monsters.forEach(m => m.ai());
-                    if (map.monsters.length === 1) {
-                        map.generate();
-                    }
-                }
-
-                loadDev() {
-                    const cursor = document.querySelector('#cursor');
-                    const tooltip = document.querySelector('#tooltip');
-                    this.canvas.addEventListener('mousemove', ({clientX, clientY}) => {
-                        const widthRatio = (parseInt(this.canvas.style.width) / map.width);
-                        const heightRatio = (parseInt(this.canvas.style.height) / map.height);
-                        const x = Math.floor(clientX / widthRatio);
-                        const y = Math.floor(clientY / heightRatio);
-                        Object.assign(tooltip.style, {
-                            display: 'block',
-                            top: `${clientY}px`,
-                            left: `${clientX}px`,
-                        });
-                        tooltip.innerText = [x, y].join(',');
-                        Object.assign(cursor.style, {
-                            display: 'block',
-                            left: `${x * widthRatio}px`,
-                            top: `${y * heightRatio}px`,
-                            width: `${widthRatio}px`,
-                            height: `${heightRatio}px`
-                        });
-                    });
-                }
-
-                resize() {
-                    const {clientWidth, clientHeight} = document.documentElement;
-                    const size = Math.min(clientWidth, clientHeight);
-                    this.canvas.style.width = `${size}px`;
-                    this.canvas.style.height = `${size}px`;
-                }
-
-                render() {
-                    this.ctx.textBaseline = 'hanging';
-                    this.ctx.textAlign = 'left';
-                    const bounds = this.getBounds();
-                    this.ctx.clearRect(...bounds);
-                    this.ctx.fillStyle = Color.black;
-                    this.ctx.fillRect(...bounds);
-
-                    if (map.player.hp < 0) {
-                        const text = `Dead & buried on level ${map.difficulty}.`;
-                        this.ctx.fillStyle = Color.red;
-                        this.ctx.fillText(
-                            text,
-                            map.width * this.tileSize / 2 - this.ctx.measureText(text).width / 2,
-                            map.height * this.tileSize / 2
-                        );
-                        return;
-                    }
-
-                    map.reduce((tile, x, y) => {
-                        this.renderText(tile, x, y);
-                    });
-                    map.monsters.forEach(m => {
-                        m instanceof Player
-                            ? this.renderText(m, m.x, m.y, Color.blue)
-                            : this.renderText(m, m.x, m.y, Color.red);
-                    });
-                    window.requestAnimationFrame(this.render.bind(this));
-                }
-
-                renderText(text, x, y, fg = Color.white) {
-                    const sizeMod = text.sizeMod || 1;
-                    text = text.toString();
-                    const length = text.split('').reduce((sum, char) => {
-                        return sum + this.ctx.measureText(char).width;
-                    }, 0) / text.length;
-                    const size = this.tileSize * (length / this.ctx.measureText(text).width) * sizeMod;
-                    this.ctx.font = `normal normal ${size}pt Monospaced`;
-                    this.ctx.fillStyle = fg.setAlpha(UI.calculateLightLevelFrom(x, y));
-                    this.ctx.fillText(text, x * this.tileSize, y * this.tileSize);
-                }
-
-                static calculateLightLevelFrom(tx, ty) {
-                    const {x, y, seeRadius} = map.player;
-                    const sqrt = Math.sqrt(Math.pow(x - tx, 2) + Math.pow(y - ty, 2));
-                    return 1 - (sqrt - seeRadius);
-                }
-
-                getBounds() {
-                    const {width, height} = this.canvas;
-                    return [0, 0, width, height];
-                }
-            }
-
-            const size = parseInt(Math.min(
-                document.documentElement.clientWidth,
-                document.documentElement.clientHeight
-            ) / 24);
-            const map = new Map(size, size, 4);
-            map.generate();
-            new UI(document.querySelector('#canvas'));
+    class Color {
+        constructor(red, green, blue, alpha = 1) {
+            this.colors = [red, green, blue];
+            this.alpha = alpha;
         }
 
-        console.log(new Game());
+        setAlpha(alpha) {
+            this.alpha = Math.clamp(alpha, 1, 0);
+            return this;
+        }
+
+        toString() {
+            return `rgba(${this.colors.map(v => parseInt(v * 255)).concat([this.alpha])})`;
+        }
+    }
+
+    Color.black = new Color(0, 0, 0);
+    Color.white = new Color(1, 1, 1);
+    Color.yellow = new Color(1, 1, 0);
+    Color.red = new Color(1, 0, 0);
+    Color.green = new Color(0, 1, 0);
+    Color.blue = new Color(0, 0, 1);
+
+    class Character {
+        constructor(char, fg = Color.white) {
+            this.char = char;
+            this.fg = fg;
+        }
+
+        toString() {
+            return this.char;
+        }
+    }
+
+    class Canvas {
+        constructor(width = 50, height = 50, fontSize = 14, container = document.body, devMode = true) {
+            this.map = [];
+            this.canvas = document.createElement('canvas');
+            this.ctx = this.canvas.getContext('2d');
+            this.cellSize = Math.max(fontSize, this.ctx.measureText('_').width);
+            Object.assign(this.canvas, {
+                width: width * this.cellSize,
+                height: height * this.cellSize
+            });
+
+            if (devMode) {
+                const tooltip = document.createElement('pre');
+                Object.assign(tooltip.style, {
+                    position: 'absolute',
+                    padding: '3px',
+                    'background-color': Color.white,
+                    'pointer-events': 'none',
+                });
+                this.canvas.addEventListener('mousemove', this._mouseMove.bind(this, tooltip));
+                container.appendChild(tooltip);
+            }
+
+            window.addEventListener('resize', this._resize.bind(this));
+            window.requestAnimationFrame(this._paint.bind(this));
+            this._resize();
+            container.appendChild(this.canvas);
+        }
+
+        setCharacterMap(map) {
+            this.map = map;
+
+            return this;
+        }
+
+        _mouseMove(tooltip, {clientX, clientY}) {
+            const styleWidth = parseFloat(this.canvas.style.width);
+            const styleHeight = parseFloat(this.canvas.style.height);
+            const widthRatio = this.canvas.width / styleWidth;
+            const heightRatio = this.canvas.height / styleHeight;
+            const x = Math.floor(clientX * widthRatio / this.cellSize);
+            const y = Math.floor(clientY * heightRatio / this.cellSize);
+            tooltip.innerText = [x, y].join(',');
+            const computedStyles = window.getComputedStyle(tooltip);
+            const xOffset = clientX > styleWidth / 2 ? parseFloat(computedStyles.width) : 0;
+            const yOffset = clientY > styleHeight / 2 ? parseFloat(computedStyles.height) : 0;
+            Object.assign(tooltip.style, {
+                display: 'block',
+                left: `${clientX - xOffset}px`,
+                top: `${clientY - yOffset * 2}px`,
+            });
+        }
+
+        _resize() {
+            const {clientWidth, clientHeight} = document.documentElement;
+            const size = Math.min(clientWidth, clientHeight);
+            Object.assign(this.canvas.style, {
+                width: `${size}px`,
+                height: `${size}px`,
+            });
+        }
+
+        _paint() {
+            this._clear();
+            this.ctx.fillStyle = Color.white;
+            this.map.forEach((col, y) => col.forEach((txt, x) => {
+                this._paintCharacter(txt, x, y);
+            }));
+            window.requestAnimationFrame(this._paint.bind(this));
+        }
+
+        _clear() {
+            const {width, height} = this.canvas;
+            const bounds = [0, 0, width, height];
+            this.ctx.clearRect(...bounds);
+            this.ctx.fillStyle = Color.black;
+            this.ctx.fillRect(...bounds);
+        }
+
+        _paintCharacter(char, x, y) {
+            this.ctx.font = `normal normal ${this.cellSize}px Monospaced`;
+            this.ctx.textBaseline = 'top';
+            this.ctx.fillStyle = char instanceof Character ? char.fg : Color.white;
+            `${char}`.split('').forEach((c, i) => this.ctx.fillText(c, (x + i) * this.cellSize, y * this.cellSize));
+        }
+    }
+
+    const canvas = new Canvas().setCharacterMap([
+        [new Character('foobar', Color.blue)],
+        ['!'].concat('Hello'.split('').map(c => new Character(c, Color.red))).concat(['!']),
+        ['!'].concat('World'.split('').map(c => new Character(c, Color.green))).concat(['!']),
+    ]);
 </script>
 </body>
 </html>
