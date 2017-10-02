@@ -115,9 +115,9 @@
                 ctx.fillRect(...rbounds);
 
                 if (player.health < 0) {
-                    ctx.fillStyle = Color.red;
+                    ctx.fillStyle = Color.red.setAlpha(1);
                     let txt = `Dead & buried on level ${level} with $${player.score}`;
-                    ctx.fillText(txt, (600 / 11 - ctx.measureText(txt).width) * 11 / 2, (height + 1) * 11 / 2);
+                    ctx.fillText(txt, width / 2 * 11 - ctx.measureText(txt).width / 2, height / 2 * 11);
                     return;
                 }
 
@@ -169,7 +169,7 @@
                 }
 
                 // draw player info
-                ctx.fillStyle = Color.white;
+                ctx.fillStyle = Color.white.setAlpha(1);
 
                 let layout = "Score: " + player.score;
                 ctx.fillText(layout, 11, (height + 1) * 11);
@@ -183,7 +183,7 @@
 
                 // status
                 for (let i = 0; i < 3; i++) {
-                    ctx.fillStyle = player.statusColor[i];
+                    ctx.fillStyle = player.statusColor[i].setAlpha(1);
                     layout = player.status[i];
                     ctx.fillText(layout, 30 * 11, (height + i + 1) * 11);
                 }
