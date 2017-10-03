@@ -8,6 +8,7 @@
     <style>
         body {
             margin: 0;
+            background-color: #000000;
         }
     </style>
 </head>
@@ -105,9 +106,15 @@
             _resize() {
                 const {clientWidth, clientHeight} = document.documentElement;
                 const size = Math.min(clientWidth, clientHeight);
+                const offset = (Math.max(clientWidth, clientHeight) - size) / 2;
+                const orientation = clientWidth > clientHeight ? 'left' : 'top';
+                const other = orientation === 'left' ? 'top' : 'left';
                 Object.assign(this.canvas.style, {
+                    position: 'absolute',
                     width: `${size}px`,
                     height: `${size}px`,
+                    [orientation]: `${offset}px`,
+                    [other]: '0px',
                 });
             }
 
