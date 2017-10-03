@@ -47,10 +47,10 @@
         Color.yellow = () => new Color(1, 1, 0);
         Color.red = () => new Color(1, 0, 0);
         Color.green = () => new Color(0, 1, 0);
-        Color.blue = () => new Color(0, 0, 1);
+        Color.blue = () => new Color(0.3, 0.3, 1);
 
         class Canvas {
-            constructor(fontSize = 14, container = document.body, devMode = true) {
+            constructor(fontSize = 14, container = document.body, devMode = false) {
                 this.map = [];
                 this.canvas = document.createElement('canvas');
                 this.ctx = this.canvas.getContext('2d');
@@ -178,11 +178,21 @@
         }
 
         class Monster extends Character {
-            constructor(char, fg) {
+            constructor(hp, str, char, fg = Color.red()) {
                 super(char, fg);
+                this.lvl = 1;
+                this.maxHp = hp;
+                this.hp = hp;
+                this.str = str;
                 this.x = -1;
                 this.y = -1;
                 this.sightRadius = 7;
+                this.exp = 0;
+                this.rest = 0;
+            }
+
+            getNextLvlExp() {
+                return this.lvl * this.str;
             }
 
             setPosition(x, y) {
@@ -192,32 +202,75 @@
             }
 
             move(dx, dy) {
+                if (dx === 0 && dy === 0 && this.hp < this.maxHp) {
+                    this.rest++;
+                    if (this.rest > 20) {
+                        this.rest = 0;
+                        this.hp = Math.clamp(this.hp + 1, this.maxHp, 0);
+                    }
+                    return this;
+                }
+
                 const tx = this.x + dx;
                 const ty = this.y + dy;
-                if (!(map.get(tx, ty) instanceof Wall)) {
-                    this.x = tx;
-                    this.y = ty;
+                const target = map.getMonster(tx, ty);
+                if (
+                    this !== target &&
+                    (this instanceof Player && target instanceof Monster ||
+                        this instanceof Monster && target instanceof Player)
+                ) {
+                    this.damage(target);
+                } else if (!(map.getTile(tx, ty) instanceof Wall)) {
+                    map.move(this, tx, ty);
                 }
 
                 return this;
+            }
+
+            damage(target) {
+                target.hp -= (Math.randInt(this.str) + 1);
+                if (target.hp < 0) {
+                    map.kill(target);
+                    const nextLvlExp = this.getNextLvlExp();
+                    this.exp += target.str;
+                    if (this.exp >= nextLvlExp) {
+                        this.exp -= nextLvlExp;
+                        this.lvl++;
+                        this.str = 3 + this.lvl;
+                        this.maxHp += this.lvl;
+                    }
+                }
+            }
+        }
+
+        class Pawn extends Monster {
+            constructor() {
+                super(3, 1, 'p');
             }
         }
 
         class Player extends Monster {
             constructor() {
-                super('@', Color.blue());
+                super(5, 5, '@', Color.blue());
                 this.seen = [];
+                this.score = 0;
             }
 
             canSee(tx, ty) {
+                let walls = 0;
                 const {x, y} = this;
+                if (Math.sqrt(Math.pow(tx - x, 2) + Math.pow(ty - y, 2)) > this.sightRadius) {
+                    return false;
+                }
                 while (tx !== x || ty !== y) {
-                    if (map.get(tx, ty) instanceof Wall) {
-                        return false;
+                    if (map.getTile(tx, ty) instanceof Wall) {
+                        walls++;
+                        if (walls > 1) {
+                            return false;
+                        }
                     }
-                    Math.random() < 0.1
-                        ? tx += (Math.clamp(tx - x) * -1)
-                        : ty += (Math.clamp(ty - y) * -1);
+                    tx += (Math.clamp(tx - x) * -1)
+                    ty += (Math.clamp(ty - y) * -1);
                 }
 
                 return true;
@@ -226,14 +279,14 @@
             move(dx, dy) {
                 super.move(dx, dy);
                 const {x, y} = this;
-                const target = map.get(x, y);
+                const target = map.getTile(x, y);
                 switch (true) {
                     case target instanceof Potion:
-                        alert('Got Potion!');
+                        player.hp = Math.min(player.maxHp, player.hp + Math.randInt(6, 1));
                         map.clear(x, y);
                         break;
                     case target instanceof Gold:
-                        alert('Got Gold!');
+                        player.score += Math.randInt(6, 1);
                         map.clear(x, y);
                         break;
                 }
@@ -242,19 +295,47 @@
 
         class Map {
             constructor(tiles, rooms) {
-                this.monsters = [];
+                this.monsters = tiles.map(col => col.map(() => undefined));
                 this.tiles = tiles;
                 this.rooms = rooms;
                 this.width = this.tiles[0].length;
                 this.height = this.tiles.length;
             }
 
+            move(monster, x, y) {
+                this.monsters[monster.y][monster.x] = undefined;
+                this.monsters[y][x] = monster;
+                return Object.assign(monster, {x, y});
+            }
+
+            kill(monster) {
+                this.monsters[monster.y][monster.x] = undefined;
+            }
+
             toArray() {
+                const info = [
+                    'HP'.split('')
+                        .concat(`${player.hp}`.split('').map(c => new Character(c, Color.green())))
+                        .concat(['/'])
+                        .concat(`${player.maxHp}`.split('').map(c => new Character(c, Color.green())))
+                    ,
+                    'XP'.split('')
+                        .concat(`${player.exp}`.split('').map(c => new Character(c, Color.red())))
+                        .concat(['/'])
+                        .concat(`${player.getNextLvlExp()}`.split('').map(c => new Character(c, Color.red()))),
+                    'Score'.split('').concat([new Character(player.score, Color.yellow())]),
+                    'Lvl'.split('')
+                        .concat(new Character(player.lvl, Color.blue()))
+                        .concat([':'])
+                        .concat(level)
+                    ,
+                ];
                 const {x, y, sightRadius} = player;
-                const x1 = x - sightRadius;
-                const y1 = y - sightRadius;
-                const x2 = x + sightRadius;
-                const y2 = y + sightRadius;
+                const range = sightRadius + 1;
+                const x1 = x - range;
+                const y1 = y - range + info.length / 2;
+                const x2 = x + range;
+                const y2 = y + range - info.length / 2;
                 const xLeft = x1 < 0 ? -1 * x1 : 0;
                 const yTop = y1 < 0 ? -1 * y1 : 0;
                 const xRight = x2 > this.width ? x2 - this.width : 0;
@@ -266,16 +347,11 @@
                     return col.slice(x1 + xAdjust, x2 + xAdjust).map((c, i) => {
                         const realX = i + x1 + xAdjust;
                         const realY = j + y1 + yAdjust;
-                        const max = Math.sqrt(Math.pow(sightRadius, 2) * 2);
+                        const max = Math.sqrt(Math.pow(range, 2) * 2);
                         const cur = Math.sqrt(Math.pow(realX - x, 2) + Math.pow(realY - y, 2));
                         const sees = player.canSee(realX, realY);
                         const light = sees ? Math.max(0.25, 1 - (cur / max)) : 0;
-                        const char = this.monsters.reduce((c, m) => {
-                            if (m.x === realX && m.y === realY) {
-                                return m;
-                            }
-                            return c;
-                        }, c);
+                        const char = this.getMonster(realX, realY) || this.getTile(realX, realY);
                         char.fg.setAlpha(light);
                         if (sees) {
                             player.seen[[realX, realY].join(',')] = char;
@@ -288,15 +364,15 @@
                         }
                         return char;
                     });
-                });
+                }).concat(info);
             }
 
             spawn(monster) {
-                let hardStop = 1000;
+                let hardStop = 10000;
                 while (--hardStop >= 0) {
                     const [x, y] = this.rooms.random().random();
-                    if (this.tiles[y][x] instanceof Floor) {
-                        this.monsters.push(monster);
+                    if (this.getTile(x, y) instanceof Floor && !this.getMonster(x, y)) {
+                        this.monsters[y][x] = monster;
                         return monster.setPosition(x, y);
                     }
                 }
@@ -308,8 +384,12 @@
                 return this;
             }
 
-            get(x, y) {
+            getTile(x, y) {
                 return this.tiles[y][x];
+            }
+
+            getMonster(x, y) {
+                return this.monsters[y][x];
             }
 
             static generate(width = 25, height = 25, level = 0) {
@@ -318,7 +398,7 @@
                 const tiles = new Array(height).fill(undefined).map(() => {
                     return new Array(width).fill(undefined).map(() => new Wall());
                 });
-                const rooms = new Array(Math.randInt(sizeRatio * 5 + 3, parseInt(sizeRatio * 3)))
+                const rooms = new Array(Math.randInt(sizeRatio * 5 + 3, parseInt(sizeRatio * 3) + 3))
                     .fill(undefined)
                     .map(() => {
                         let hardStop = 1000;
@@ -367,12 +447,18 @@
                 placeItems(3 + Math.randInt(sizeRatio * level), Potion);
                 placeItems(1, Exit);
 
-                return new Map(tiles, rooms);
+                const map = new Map(tiles, rooms);
+
+                new Array(level + rooms.length).fill(undefined).forEach(() => {
+                    map.spawn(new Pawn());
+                });
+
+                return map;
             }
         }
 
-        let level = 0;
-        let map = Map.generate(15, 15, level);
+        let level = 1;
+        let map = Map.generate(20, 20, level);
         const player = map.spawn(new Player());
 
         const canvas = new Canvas().setCharacterMap(map.toArray());
@@ -392,7 +478,7 @@
                 if (clientX < width / 3) {
                     player.move(-1, 0);
                 } else if (clientX < width / 3 * 2) {
-                    if (map.get(player.x, player.y) instanceof Exit) {
+                    if (map.getTile(player.x, player.y) instanceof Exit) {
                         player.seen = [];
                         map = Map.generate(map.width + level, map.height + level, ++level);
                         map.spawn(player);
@@ -438,7 +524,7 @@
                     player.move(-1, 1);
                     break;
                 case 'x':
-                    if (map.get(player.x, player.y) instanceof Exit) {
+                    if (map.getTile(player.x, player.y) instanceof Exit) {
                         player.seen = [];
                         map = Map.generate(map.width + level, map.height + level, ++level);
                         map.spawn(player);
@@ -454,7 +540,7 @@
         });
     }
 
-    console.log(new Game());
+    new Game();
 </script>
 </body>
 </html>
