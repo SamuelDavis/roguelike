@@ -42,12 +42,12 @@
             }
         }
 
-        Color.black = new Color(0, 0, 0);
-        Color.white = new Color(1, 1, 1);
-        Color.yellow = new Color(1, 1, 0);
-        Color.red = new Color(1, 0, 0);
-        Color.green = new Color(0, 1, 0);
-        Color.blue = new Color(0, 0, 1);
+        Color.black = () => new Color(0, 0, 0);
+        Color.white = () => new Color(1, 1, 1);
+        Color.yellow = () => new Color(1, 1, 0);
+        Color.red = () => new Color(1, 0, 0);
+        Color.green = () => new Color(0, 1, 0);
+        Color.blue = () => new Color(0, 0, 1);
 
         class Canvas {
             constructor(fontSize = 14, container = document.body, devMode = true) {
@@ -61,7 +61,7 @@
                     Object.assign(tooltip.style, {
                         position: 'absolute',
                         padding: '3px',
-                        'background-color': Color.white,
+                        'background-color': Color.white(),
                         'pointer-events': 'none',
                     });
                     this.canvas.addEventListener('mousemove', this._mouseMove.bind(this, tooltip));
@@ -113,7 +113,7 @@
 
             _paint() {
                 this._clear();
-                this.ctx.fillStyle = Color.white;
+                this.ctx.fillStyle = Color.white();
                 this.map.forEach((col, y) => col.forEach((txt, x) => {
                     this._paintCharacter(txt, x, y);
                 }));
@@ -124,20 +124,20 @@
                 const {width, height} = this.canvas;
                 const bounds = [0, 0, width, height];
                 this.ctx.clearRect(...bounds);
-                this.ctx.fillStyle = Color.black;
+                this.ctx.fillStyle = Color.black();
                 this.ctx.fillRect(...bounds);
             }
 
             _paintCharacter(char, x, y) {
                 this.ctx.font = `normal normal ${this.cellSize}px Monospaced`;
                 this.ctx.textBaseline = 'top';
-                this.ctx.fillStyle = char instanceof Character ? char.fg : Color.white;
+                this.ctx.fillStyle = char instanceof Character ? char.fg : Color.white();
                 `${char}`.split('').forEach((c, i) => this.ctx.fillText(c, (x + i) * this.cellSize, y * this.cellSize));
             }
         }
 
         class Character {
-            constructor(char, fg = Color.white) {
+            constructor(char, fg = Color.white()) {
                 this.char = char;
                 this.fg = fg;
             }
@@ -161,13 +161,13 @@
 
         class Gold extends Character {
             constructor() {
-                super('$', Color.yellow);
+                super('$', Color.yellow());
             }
         }
 
         class Potion extends Character {
             constructor() {
-                super('!', Color.green);
+                super('!', Color.green());
             }
         }
 
@@ -205,7 +205,7 @@
 
         class Player extends Monster {
             constructor() {
-                super('@', Color.blue);
+                super('@', Color.blue());
             }
 
             move(dx, dy) {
@@ -249,12 +249,19 @@
 
                 return this.tiles.slice(y1 + yAdjust, y2 + yAdjust).map((col, j) => {
                     return col.slice(x1 + xAdjust, x2 + xAdjust).map((c, i) => {
-                        return this.monsters.reduce((c, m) => {
-                            if (m.x === i + x1 + xAdjust && m.y === j + y1 + yAdjust) {
+                        const realX = i + x1 + xAdjust;
+                        const realY = j + y1 + yAdjust;
+                        const max = Math.sqrt(Math.pow(sightRadius, 2) * 2);
+                        const cur = Math.sqrt(Math.pow(realX - x, 2) + Math.pow(realY - y, 2));
+                        const light = 1 - (cur / max);
+                        const char = this.monsters.reduce((c, m) => {
+                            if (m.x === realX && m.y === realY) {
                                 return m;
                             }
                             return c;
                         }, c);
+                        char.fg.setAlpha(light);
+                        return char;
                     });
                 });
             }
@@ -282,14 +289,9 @@
 
             static generate(width = 25, height = 25, level = 0) {
                 const sizeRatio = (width / 25 + height / 25) / 2;
-                const wall = new Wall();
-                const gold = new Gold();
-                const potion = new Potion();
-                const exit = new Exit();
 
-                const floor = new Floor();
                 const tiles = new Array(height).fill(undefined).map(() => {
-                    return new Array(width).fill(wall);
+                    return new Array(width).fill(undefined).map(() => new Wall());
                 });
                 const rooms = new Array(Math.randInt(sizeRatio * 5 + 3, parseInt(sizeRatio * 3)))
                     .fill(undefined)
@@ -309,7 +311,7 @@
                             if (diggable) {
                                 return new Array(h).fill(undefined).reduce((room, _, j) => {
                                     return new Array(w).fill(undefined).reduce((room, _, i) => {
-                                        tiles[y + j][x + i] = floor;
+                                        tiles[y + j][x + i] = new Floor();
                                         return room.concat([[x + i, y + j]]);
                                     }, room);
                                 }, []);
@@ -322,7 +324,7 @@
                     let [x1, y1] = room.random();
                     let [x2, y2] = rooms[(i + 1) % rooms.length].random();
                     while (x1 !== x2 || y1 !== y2) {
-                        tiles[y1][x1] = floor;
+                        tiles[y1][x1] = new Floor();
                         Math.random() < 0.5
                             ? x1 += (Math.clamp(x1 - x2) * -1)
                             : y1 += (Math.clamp(y1 - y2) * -1);
@@ -332,13 +334,13 @@
                 function placeItems(num, item) {
                     while (--num >= 0) {
                         const [x, y] = rooms.random().random();
-                        tiles[y][x] = item;
+                        tiles[y][x] = new item();
                     }
                 }
 
-                placeItems(3 + Math.randInt(sizeRatio * level), gold);
-                placeItems(3 + Math.randInt(sizeRatio * level), potion);
-                placeItems(1, exit);
+                placeItems(3 + Math.randInt(sizeRatio * level), Gold);
+                placeItems(3 + Math.randInt(sizeRatio * level), Potion);
+                placeItems(1, Exit);
 
                 return new Map(tiles, rooms);
             }
