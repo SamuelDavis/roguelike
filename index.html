@@ -206,6 +206,21 @@
         class Player extends Monster {
             constructor() {
                 super('@', Color.blue());
+                this.seen = [];
+            }
+
+            canSee(tx, ty) {
+                const {x, y} = this;
+                while (tx !== x || ty !== y) {
+                    if (map.get(tx, ty) instanceof Wall) {
+                        return false;
+                    }
+                    Math.random() < 0.1
+                        ? tx += (Math.clamp(tx - x) * -1)
+                        : ty += (Math.clamp(ty - y) * -1);
+                }
+
+                return true;
             }
 
             move(dx, dy) {
@@ -253,7 +268,8 @@
                         const realY = j + y1 + yAdjust;
                         const max = Math.sqrt(Math.pow(sightRadius, 2) * 2);
                         const cur = Math.sqrt(Math.pow(realX - x, 2) + Math.pow(realY - y, 2));
-                        const light = 1 - (cur / max);
+                        const sees = player.canSee(realX, realY);
+                        const light = sees ? Math.max(0.25, 1 - (cur / max)) : 0;
                         const char = this.monsters.reduce((c, m) => {
                             if (m.x === realX && m.y === realY) {
                                 return m;
@@ -261,6 +277,15 @@
                             return c;
                         }, c);
                         char.fg.setAlpha(light);
+                        if (sees) {
+                            player.seen[[realX, realY].join(',')] = char;
+                        } else {
+                            const seen = player.seen[[realX, realY].join(',')];
+                            if (seen) {
+                                seen.fg.setAlpha(0.25);
+                                return seen;
+                            }
+                        }
                         return char;
                     });
                 });
@@ -367,6 +392,7 @@
                     player.move(-1, 0);
                 } else if (clientX < innerWidth / 3 * 2) {
                     if (map.get(player.x, player.y) instanceof Exit) {
+                        player.seen = [];
                         map = Map.generate(map.width + level, map.height + level, ++level);
                         map.spawn(player);
                     } else {
@@ -412,6 +438,7 @@
                     break;
                 case 'x':
                     if (map.get(player.x, player.y) instanceof Exit) {
+                        player.seen = [];
                         map = Map.generate(map.width + level, map.height + level, ++level);
                         map.spawn(player);
                     } else {
