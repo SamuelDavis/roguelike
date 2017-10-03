@@ -292,7 +292,7 @@
             }
 
             spawn(monster) {
-                let hardStop = 100;
+                let hardStop = 1000;
                 while (--hardStop >= 0) {
                     const [x, y] = this.rooms.random().random();
                     if (this.tiles[y][x] instanceof Floor) {
