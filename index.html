@@ -507,8 +507,10 @@
         const player = map.spawn(new Player());
 
         const canvas = new Canvas().setCharacterMap(map.toArray());
+        const isMobile = 'ontouchstart' in window;
 
-        window.addEventListener('click', ({clientX, clientY}) => {
+        window.addEventListener(isMobile ? 'touchstart' : 'click', e => {
+            const {clientX, clientY} = isMobile ? e.touches[0] : e;
             if (player.hp < 1) {
                 return window.location.reload();
             }
