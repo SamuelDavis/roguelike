@@ -113,6 +113,20 @@
 
             _paint() {
                 this._clear();
+                if (player.hp < 1) {
+                    this.ctx.fillStyle = Color.red();
+                    const {width, height} = this.canvas;
+                    [
+                        new Character('Dead & buried', Color.red()),
+                        new Character(`on level ${level}`, Color.white()),
+                        new Character(`with $${player.score}`, Color.yellow()),
+                    ].forEach((c, i, lines) => {
+                        const x = ((width / this.cellSize) - `${c}`.length) / 2;
+                        const y = parseInt((height / this.cellSize / 2) - (lines.length / 2)) + i;
+                        this._paintCharacter(c, x, y);
+                    });
+                    return;
+                }
                 this.ctx.fillStyle = Color.white();
                 this.map.forEach((col, y) => col.forEach((txt, x) => {
                     this._paintCharacter(txt, x, y);
@@ -189,6 +203,8 @@
                 this.sightRadius = 7;
                 this.exp = 0;
                 this.rest = 0;
+                this.tx = null;
+                this.ty = null;
             }
 
             getNextLvlExp() {
@@ -220,7 +236,7 @@
                         this instanceof Monster && target instanceof Player)
                 ) {
                     this.damage(target);
-                } else if (!(map.getTile(tx, ty) instanceof Wall)) {
+                } else if (!(map.getMonster(tx, ty)) && !(map.getTile(tx, ty) instanceof Wall)) {
                     map.move(this, tx, ty);
                 }
 
@@ -241,20 +257,6 @@
                     }
                 }
             }
-        }
-
-        class Pawn extends Monster {
-            constructor() {
-                super(3, 1, 'p');
-            }
-        }
-
-        class Player extends Monster {
-            constructor() {
-                super(5, 5, '@', Color.blue());
-                this.seen = [];
-                this.score = 0;
-            }
 
             canSee(tx, ty) {
                 let walls = 0;
@@ -269,11 +271,47 @@
                             return false;
                         }
                     }
-                    tx += (Math.clamp(tx - x) * -1)
+                    tx += (Math.clamp(tx - x) * -1);
                     ty += (Math.clamp(ty - y) * -1);
                 }
 
                 return true;
+            }
+
+            ai() {
+                if (this.x === this.tx && this.y === this.ty) {
+                    this.tx = null;
+                    this.ty = null;
+                }
+                if (this.canSee(player.x, player.y)) {
+                    this.tx = player.x;
+                    this.ty = player.y;
+                } else if (!this.tx || !this.ty) {
+                    this.tx = Math.randInt(3) - 1;
+                    this.ty = Math.randInt(3) - 1;
+                }
+
+                this.move(
+                    Math.clamp(this.x - this.tx) * -1,
+                    Math.clamp(this.y - this.ty) * -1,
+                );
+            }
+        }
+
+        class Pawn extends Monster {
+            constructor() {
+                super(3, 1, 'p');
+            }
+        }
+
+        class Player extends Monster {
+            constructor() {
+                super(10, 5, '@', Color.blue());
+                this.seen = [];
+                this.score = 0;
+            }
+
+            ai() {
             }
 
             move(dx, dy) {
@@ -464,6 +502,10 @@
         const canvas = new Canvas().setCharacterMap(map.toArray());
 
         canvas.canvas.addEventListener('click', ({clientX, clientY}) => {
+            if (player.hp < 1) {
+                return;
+            }
+            canvas.setCharacterMap(map.toArray());
             const width = parseFloat(canvas.canvas.style.width);
             const height = parseFloat(canvas.canvas.style.height);
             if (clientY < height / 3) {
@@ -498,9 +540,14 @@
                 }
             }
             canvas.setCharacterMap(map.toArray());
+            map.monsters.forEach(col => col.forEach(m => m && m.ai()));
         });
 
         window.addEventListener('keypress', ({key}) => {
+            if (player.hp < 1) {
+                return;
+            }
+            canvas.setCharacterMap(map.toArray());
             switch (key) {
                 case 'q':
                     player.move(-1, -1);
@@ -537,6 +584,7 @@
                     break;
             }
             canvas.setCharacterMap(map.toArray());
+            map.monsters.forEach(col => col.forEach(m => m && m.ai()));
         });
     }
 
