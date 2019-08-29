@@ -12,12 +12,13 @@ export default class DrawPanel {
   ctx
   width
   height
-  scale = 13
+  scale = 25
   offset = this.scale / 2
 
   constructor (app) {
     this.app = app
     this.messages = document.createElement('div')
+    this.messages.setAttribute('style', 'position:absolute;top:0;left:0;width:100%;')
     this.health = document.createElement('h2')
     this.level = document.createElement('h2')
     this.score = document.createElement('h2')
@@ -70,8 +71,8 @@ export default class DrawPanel {
   setPreferredSize (width, height) {
     this.width = width * this.scale
     this.height = height * this.scale
-    this.canvas.setAttribute('width', `${this.width}px`)
-    this.canvas.setAttribute('height', `${this.height}px`)
+    this.canvas.setAttribute('width', `${this.width}`)
+    this.canvas.setAttribute('height', `${this.height}`)
   }
 
   addTo (container) {
@@ -122,7 +123,7 @@ export default class DrawPanel {
       this.ctx.fillStyle = new Color(1, healthPct, healthPct, alphaMap[y][x]).toString()
       this.ctx.fillText(c, x * this.scale + this.offset, y * this.scale + this.offset, this.scale)
     })
-    this.health.innerText = `Health: ${health} / ${maxHealth}`
+    this.health.innerText = `Health: ${health}/${maxHealth}`
     const g = health / maxHealth
     const r = 1 - g
     this.health.style.color = new Color(r, g, 0).toString()
