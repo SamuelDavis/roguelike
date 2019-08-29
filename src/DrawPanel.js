@@ -117,9 +117,9 @@ export default class DrawPanel {
       this.ctx.fillStyle = color.setAlpha(alpha).toString()
       this.ctx.fillText(c, x * this.scale + this.offset, y * this.scale + this.offset, this.scale)
     }))
-    monsters.forEach(({ x, y, symbol: c }) => {
+    monsters.forEach(({ healthPct, x, y, symbol: c }) => {
       if (!sees[y][x]) return
-      this.ctx.fillStyle = WHITE.setAlpha(alphaMap[y][x]).toString()
+      this.ctx.fillStyle = new Color(1, healthPct, healthPct, alphaMap[y][x]).toString()
       this.ctx.fillText(c, x * this.scale + this.offset, y * this.scale + this.offset, this.scale)
     })
     this.health.innerText = `Health: ${health} / ${maxHealth}`

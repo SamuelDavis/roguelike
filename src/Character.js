@@ -42,7 +42,6 @@ export default class Character extends Monster {
     if (this.rest > 20) {
       this.rest = 0
       this.health++
-      alert('With time, you feel slightly better.')
     }
 
     this.see()

@@ -31,6 +31,10 @@ export default class Monster {
     this.name = name
   }
 
+  get healthPct () {
+    return this.health / this.maxHealth
+  }
+
   ai () {
     const { x, y, app: { map, player: { x: playerX, y: playerY } } } = this
     const see = this.lineOfSight(playerX, playerY)
